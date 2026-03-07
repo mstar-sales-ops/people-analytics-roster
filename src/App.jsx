@@ -362,97 +362,35 @@ function downloadCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-function toneClasses(tone) {
-  if (tone === 'success') {
-    return 'border-[color:var(--success-soft)] bg-[color:var(--success-bg)] text-[color:var(--ink-strong)]';
-  }
-
-  if (tone === 'warning') {
-    return 'border-[color:var(--warn-soft)] bg-[color:var(--warn-bg)] text-[color:var(--ink-strong)]';
-  }
-
-  if (tone === 'danger') {
-    return 'border-[color:var(--danger-soft)] bg-[color:var(--danger-bg)] text-[color:var(--ink-strong)]';
-  }
-
-  if (tone === 'dark') {
-    return 'border-[color:var(--ink-strong)] bg-[color:var(--ink-strong)] text-white';
-  }
-
-  return 'border-[color:var(--line)] bg-white text-[color:var(--ink-strong)]';
-}
-
-function StatusDot({ tone }) {
-  const colorMap = {
-    success: 'bg-[color:var(--success)]',
-    warning: 'bg-[color:var(--warn)]',
-    danger: 'bg-[color:var(--danger)]',
-    neutral: 'bg-[color:var(--muted)]',
-    primary: 'bg-[color:var(--brand)]',
-  };
-
-  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${colorMap[tone]}`} />;
-}
-
-function SectionShell({ eyebrow, title, detail, tone = 'neutral', children, aside }) {
+function Section({ title, description, right, children }) {
   return (
-    <section
-      className={`rounded-[2rem] border p-6 shadow-[0_24px_60px_-32px_rgba(38,47,48,0.28)] ${toneClasses(
-        tone,
-      )}`}
-    >
-      <div className="flex flex-col gap-5 border-b border-black/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[color:var(--muted-deep)]">
-            {eyebrow}
-          </div>
-          <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
-          {detail ? <p className="max-w-3xl text-sm leading-6 text-[color:var(--muted-deep)]">{detail}</p> : null}
+    <section className="rounded-2xl border border-[color:var(--line)] bg-white">
+      <div className="flex flex-col gap-3 border-b border-[color:var(--line)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-[color:var(--ink)]">{title}</h2>
+          {description ? <p className="mt-1 text-sm text-[color:var(--muted)]">{description}</p> : null}
         </div>
-        {aside ? <div>{aside}</div> : null}
+        {right ? <div>{right}</div> : null}
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
 
-function WorkflowStage({ number, title, detail, active, complete }) {
-  const tone = complete ? 'success' : active ? 'warning' : 'neutral';
-  return (
-    <div
-      className={`rounded-[1.75rem] border px-4 py-4 ${toneClasses(tone)} transition`}
-    >
-      <div className="flex items-center gap-3">
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-semibold ${
-            complete
-              ? 'bg-[color:var(--success)] text-[color:var(--ink-strong)]'
-              : active
-                ? 'bg-[color:var(--warn)] text-[color:var(--ink-strong)]'
-                : 'bg-[color:var(--surface-alt)] text-[color:var(--muted-deep)]'
-          }`}
-        >
-          {number}
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-[color:var(--ink-strong)]">{title}</div>
-          <div className="text-xs text-[color:var(--muted-deep)]">{detail}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+function StatTile({ label, value, tone = 'default' }) {
+  const toneClass =
+    tone === 'success'
+      ? 'border-[color:var(--success-line)] bg-[color:var(--success-bg)]'
+      : tone === 'warning'
+        ? 'border-[color:var(--warn-line)] bg-[color:var(--warn-bg)]'
+        : 'border-[color:var(--line)] bg-white';
 
-function MetricCard({ label, value, sublabel, tone = 'neutral' }) {
   return (
-    <div className={`rounded-[1.75rem] border p-4 ${toneClasses(tone)}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--muted-deep)]">
+    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
         {label}
       </div>
-      <div className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--ink-strong)]">
-        {value}
-      </div>
-      {sublabel ? <div className="mt-1 text-sm text-[color:var(--muted-deep)]">{sublabel}</div> : null}
+      <div className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">{value}</div>
     </div>
   );
 }
@@ -461,178 +399,100 @@ function UploadCard({ label, helperText, file, rowCount, headerCount, onChange }
   const ready = Boolean(file);
 
   return (
-    <label className="group block cursor-pointer rounded-[1.9rem] border border-[color:var(--line)] bg-white p-5 shadow-[0_18px_42px_-30px_rgba(38,47,48,0.35)] transition hover:-translate-y-0.5 hover:border-[color:var(--brand-soft)] hover:shadow-[0_24px_48px_-28px_rgba(255,69,0,0.28)]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface-alt)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--muted-deep)]">
-            <StatusDot tone={ready ? 'success' : 'neutral'} />
-            {ready ? 'Loaded' : 'Waiting'}
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-[color:var(--ink-strong)]">{label}</h3>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--muted-deep)]">{helperText}</p>
-          </div>
+    <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-[color:var(--ink)]">{label}</div>
+          <div className="mt-1 text-sm leading-6 text-[color:var(--muted)]">{helperText}</div>
         </div>
-        <div className="hidden h-14 w-14 items-center justify-center rounded-2xl bg-[color:var(--surface-alt)] text-xl text-[color:var(--brand)] sm:flex">
-          {label === 'Live Roster' ? 'A' : 'B'}
+        <div
+          className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+            ready
+              ? 'bg-[color:var(--success-bg)] text-[color:var(--ink)]'
+              : 'bg-white text-[color:var(--muted)]'
+          }`}
+        >
+          {ready ? 'Loaded' : 'Waiting'}
         </div>
       </div>
 
-      <div className="mt-5 rounded-[1.5rem] border border-dashed border-[color:var(--line)] bg-[color:var(--surface-alt)] p-4">
-        <div className="text-sm font-medium text-[color:var(--ink-strong)]">
+      <div className="mt-4 rounded-lg border border-[color:var(--line)] bg-white px-4 py-3">
+        <div className="text-sm font-medium text-[color:var(--ink)]">
           {file ? file.name : 'Choose a CSV file'}
         </div>
-        <div className="mt-2 text-sm text-[color:var(--muted-deep)]">
-          {ready ? `${rowCount} rows parsed · ${headerCount} headers available for mapping` : 'We parse headers immediately after upload and suggest a first-pass mapping.'}
+        <div className="mt-1 text-sm text-[color:var(--muted)]">
+          {ready ? `${rowCount} rows parsed · ${headerCount} headers found` : 'Headers will be extracted immediately after upload.'}
         </div>
       </div>
 
       <input
-        className="mt-5 block w-full text-sm text-[color:var(--muted-deep)] file:mr-4 file:rounded-full file:border-0 file:bg-[color:var(--brand)] file:px-5 file:py-2.5 file:text-sm file:font-semibold file:text-white file:transition hover:file:bg-[color:var(--brand-strong)]"
+        className="mt-4 block w-full text-sm text-[color:var(--muted)] file:mr-4 file:rounded-md file:border-0 file:bg-[color:var(--brand)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[color:var(--brand-hover)]"
         type="file"
         accept=".csv,text/csv"
         onChange={(event) => onChange(event.target.files?.[0] ?? null)}
       />
-    </label>
-  );
-}
-
-function MappingPanel({
-  title,
-  description,
-  schema,
-  headers,
-  mapping,
-  rowCount,
-  onChange,
-}) {
-  return (
-    <SectionShell
-      eyebrow="Column Mapping"
-      title={title}
-      detail={description}
-      aside={
-        <div className="rounded-full bg-[color:var(--surface-alt)] px-4 py-2 text-sm text-[color:var(--muted-deep)]">
-          {rowCount} rows · {headers.length} headers
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        {schema.map((field) => (
-          <div
-            key={field.key}
-            className="grid gap-4 rounded-[1.6rem] border border-[color:var(--line)] bg-[color:var(--surface-alt)] p-4 lg:grid-cols-[1fr_1.2fr]"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-[color:var(--ink-strong)]">{field.label}</h3>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${
-                    field.required
-                      ? 'bg-[color:var(--warn-bg)] text-[color:var(--ink-strong)]'
-                      : 'bg-white text-[color:var(--muted-deep)]'
-                  }`}
-                >
-                  {field.required ? 'Required' : 'Optional'}
-                </span>
-              </div>
-              <p className="text-sm leading-6 text-[color:var(--muted-deep)]">{field.description}</p>
-            </div>
-
-            <div className="space-y-2">
-              <select
-                className="w-full rounded-[1rem] border border-[color:var(--line)] bg-white px-4 py-3 text-sm text-[color:var(--ink-strong)] outline-none transition focus:border-[color:var(--brand)] focus:ring-2 focus:ring-[color:var(--brand-ring)]"
-                value={mapping[field.key] ?? ''}
-                onChange={(event) => onChange(field.key, event.target.value)}
-              >
-                <option value="">
-                  {field.required ? 'Select a source column' : 'Leave unmapped'}
-                </option>
-                {headers.map((header) => (
-                  <option key={header} value={header}>
-                    {header}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-[color:var(--muted-deep)]">
-                {mapping[field.key]
-                  ? `Mapped from "${mapping[field.key]}".`
-                  : 'No source column selected yet.'}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </SectionShell>
-  );
-}
-
-function ChecklistItem({ label, done, tone = 'success' }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-[1rem] border border-[color:var(--line)] bg-white px-4 py-3">
-      <div className="flex items-center gap-3">
-        <StatusDot tone={done ? tone : 'neutral'} />
-        <span className="text-sm text-[color:var(--ink-strong)]">{label}</span>
-      </div>
-      <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-deep)]">
-        {done ? 'Ready' : 'Open'}
-      </span>
     </div>
   );
 }
 
-function SidebarCard({ title, detail, children, tone = 'neutral' }) {
+function MappingPanel({ title, schema, headers, mapping, onChange }) {
   return (
-    <div className={`rounded-[1.75rem] border p-5 ${toneClasses(tone)}`}>
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-[color:var(--ink-strong)]">{title}</h3>
-        {detail ? <p className="text-sm leading-6 text-[color:var(--muted-deep)]">{detail}</p> : null}
-      </div>
-      <div className="mt-4">{children}</div>
-    </div>
-  );
-}
-
-function StandardSchemaCard({ title, schema, missingMappings }) {
-  return (
-    <SidebarCard
-      title={title}
-      detail={
-        missingMappings.length
-          ? `Missing required fields: ${missingMappings.map((field) => field.label).join(', ')}`
-          : 'All required fields are mapped.'
-      }
-      tone={missingMappings.length ? 'warning' : 'success'}
-    >
-      <div className="space-y-2">
-        {schema.map((field) => {
-          const missingRequired = field.required && missingMappings.some((entry) => entry.key === field.key);
-          return (
-            <div
-              key={field.key}
-              className="flex items-center justify-between rounded-[1rem] border border-black/10 bg-white/80 px-4 py-3"
-            >
-              <div>
-                <div className="text-sm font-medium text-[color:var(--ink-strong)]">{field.label}</div>
-                <div className="text-xs text-[color:var(--muted-deep)]">{field.description}</div>
-              </div>
+    <div className="space-y-3">
+      <div className="text-sm font-semibold text-[color:var(--ink)]">{title}</div>
+      {schema.map((field) => (
+        <div
+          key={field.key}
+          className="grid gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4 lg:grid-cols-[220px_1fr]"
+        >
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-[color:var(--ink)]">{field.label}</span>
               <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ${
-                  missingRequired
-                    ? 'bg-[color:var(--danger-bg)] text-[color:var(--danger)]'
-                    : field.required
-                      ? 'bg-[color:var(--success-bg)] text-[color:var(--ink-strong)]'
-                      : 'bg-[color:var(--surface-alt)] text-[color:var(--muted-deep)]'
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                  field.required
+                    ? 'bg-[color:var(--warn-bg)] text-[color:var(--ink)]'
+                    : 'bg-white text-[color:var(--muted)]'
                 }`}
               >
-                {missingRequired ? 'Need map' : field.required ? 'Core' : 'Optional'}
+                {field.required ? 'Required' : 'Optional'}
               </span>
             </div>
-          );
-        })}
-      </div>
-    </SidebarCard>
+            <div className="mt-1 text-sm text-[color:var(--muted)]">{field.description}</div>
+          </div>
+          <div>
+            <select
+              className="w-full rounded-lg border border-[color:var(--line)] bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--brand)]"
+              value={mapping[field.key] ?? ''}
+              onChange={(event) => onChange(field.key, event.target.value)}
+            >
+              <option value="">
+                {field.required ? 'Select a source column' : 'Leave unmapped'}
+              </option>
+              {headers.map((header) => (
+                <option key={header} value={header}>
+                  {header}
+                </option>
+              ))}
+            </select>
+            <div className="mt-1 text-xs text-[color:var(--muted)]">
+              {mapping[field.key] ? `Mapped from "${mapping[field.key]}"` : 'No column selected'}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
+}
+
+function Notice({ tone = 'default', children }) {
+  const toneClass =
+    tone === 'error'
+      ? 'border-[color:var(--danger-line)] bg-[color:var(--danger-bg)]'
+      : tone === 'warning'
+        ? 'border-[color:var(--warn-line)] bg-[color:var(--warn-bg)]'
+        : 'border-[color:var(--line)] bg-[color:var(--surface-soft)]';
+
+  return <div className={`rounded-xl border px-4 py-3 text-sm text-[color:var(--ink)] ${toneClass}`}>{children}</div>;
 }
 
 export default function App() {
@@ -668,16 +528,6 @@ export default function App() {
     CHANGE_SCHEMA.filter((field) => field.required).length;
   const mappedRequiredCount =
     totalRequiredMappings - liveMissingMappings.length - changeMissingMappings.length;
-  const totalRowsLoaded = liveUpload.rows.length + changeUpload.rows.length;
-  const currentStage = isProcessing
-    ? 3
-    : processedRows.length > 0
-      ? 4
-      : readyToProcess
-        ? 3
-        : readyForMapping
-          ? 2
-          : 1;
 
   async function handleUpload(kind, file) {
     setError('');
@@ -790,356 +640,211 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-[color:var(--surface)] px-4 py-6 text-[color:var(--ink)] sm:px-6 lg:px-8 lg:py-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="relative overflow-hidden rounded-[2.4rem] border border-[color:var(--line)] bg-[color:var(--panel)] p-6 shadow-[0_32px_80px_-40px_rgba(38,47,48,0.42)] sm:p-8">
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,_rgba(255,69,0,0.22),_transparent_52%),radial-gradient(circle_at_bottom_right,_rgba(0,216,165,0.18),_transparent_38%)]" />
-          <div className="relative grid gap-8 lg:grid-cols-[1.6fr_0.9fr]">
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="inline-flex rounded-full bg-[color:var(--brand)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white">
-                  Sales Ops Workbench
-                </span>
-                <span className="inline-flex rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-deep)]">
-                  Browser-only CSV processing
-                </span>
+    <main className="min-h-screen bg-[color:var(--surface)] px-4 py-6 text-[color:var(--ink)] sm:px-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="rounded-2xl border border-[color:var(--line)] bg-white px-5 py-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--brand)]">
+                Sales Ops Tool
               </div>
-              <div className="max-w-3xl space-y-3">
-                <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.04em] text-[color:var(--ink-strong)] sm:text-5xl">
-                  Turn two inconsistent CSVs into one clean historical roster.
-                </h1>
-                <p className="max-w-2xl text-base leading-7 text-[color:var(--muted-deep)]">
-                  The workflow stays simple: ingest source files, standardize their schema, stitch
-                  the timeline, and export a roster your team can trust.
-                </p>
-              </div>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[color:var(--ink)]">
+                Historical Roster Builder
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
+                Upload a live roster and a change log, map the required columns, then export one
+                historical roster file. The processing happens in the browser.
+              </p>
             </div>
-
-            <div className="relative">
-              <div className="rounded-[2rem] border border-[color:var(--line)] bg-white/90 p-5 shadow-[0_24px_60px_-34px_rgba(38,47,48,0.3)] backdrop-blur">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[color:var(--muted-deep)]">
-                  Current focus
-                </div>
-                <div className="mt-3 text-2xl font-semibold tracking-tight text-[color:var(--ink-strong)]">
-                  {currentStage === 1
-                    ? 'Load source files'
-                    : currentStage === 2
-                      ? 'Finish schema mapping'
-                      : currentStage === 3
-                        ? 'Run the stitcher'
-                        : 'Review and export'}
-                </div>
-                <div className="mt-2 text-sm leading-6 text-[color:var(--muted-deep)]">
-                  {currentStage === 1
-                    ? 'Upload the live roster and the change log. Headers are parsed immediately.'
-                    : currentStage === 2
-                      ? 'Map missing required fields so the downstream history builder has a stable schema.'
-                      : currentStage === 3
-                        ? 'The required fields are ready. Generate the historical roster.'
-                        : 'Preview the first 50 rows, inspect data quality, and export the full file.'}
-                </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.3rem] bg-[color:var(--surface-alt)] p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-deep)]">
-                      Privacy
-                    </div>
-                    <div className="mt-2 text-sm text-[color:var(--ink-strong)]">
-                      Files never leave the browser.
-                    </div>
-                  </div>
-                  <div className="rounded-[1.3rem] bg-[color:var(--surface-alt)] p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-deep)]">
-                      Output
-                    </div>
-                    <div className="mt-2 text-sm text-[color:var(--ink-strong)]">
-                      Historical roster CSV with preview and export.
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
+              {readyToProcess
+                ? 'Ready to process'
+                : readyForMapping
+                  ? 'Finish required mapping'
+                  : 'Upload both files'}
             </div>
           </div>
-        </section>
+        </header>
 
-        <section className="grid gap-3 lg:grid-cols-4">
-          <WorkflowStage
-            number="01"
-            title="Upload"
-            detail="Parse files and detect headers"
-            active={currentStage === 1}
-            complete={Boolean(liveUpload.file && changeUpload.file)}
-          />
-          <WorkflowStage
-            number="02"
-            title="Map"
-            detail="Standardize required columns"
-            active={currentStage === 2}
-            complete={readyToProcess || currentStage > 2}
-          />
-          <WorkflowStage
-            number="03"
-            title="Stitch"
-            detail="Generate historical eras"
-            active={currentStage === 3}
-            complete={processedRows.length > 0}
-          />
-          <WorkflowStage
-            number="04"
-            title="Export"
-            detail="Review the preview and download"
-            active={currentStage === 4}
-            complete={false}
-          />
-        </section>
-
-        <section className="grid gap-3 lg:grid-cols-4">
-          <MetricCard
-            label="Files Loaded"
+        <section className="grid gap-4 md:grid-cols-4">
+          <StatTile
+            label="Files"
             value={`${Number(Boolean(liveUpload.file)) + Number(Boolean(changeUpload.file))}/2`}
-            sublabel="Both source files are required to start mapping."
-            tone={readyForMapping ? 'success' : 'neutral'}
+            tone={readyForMapping ? 'success' : 'default'}
           />
-          <MetricCard
-            label="Required Fields"
+          <StatTile
+            label="Required Mapping"
             value={`${mappedRequiredCount}/${totalRequiredMappings}`}
-            sublabel="Required mappings completed across both source tables."
-            tone={readyToProcess ? 'success' : readyForMapping ? 'warning' : 'neutral'}
+            tone={readyToProcess ? 'success' : readyForMapping ? 'warning' : 'default'}
           />
-          <MetricCard
-            label="Rows Parsed"
-            value={totalRowsLoaded}
-            sublabel="Total source rows currently loaded into the browser."
-            tone={totalRowsLoaded ? 'neutral' : 'neutral'}
-          />
-          <MetricCard
-            label="Issues Found"
-            value={issues.length}
-            sublabel="Validation notes generated during processing."
-            tone={issues.length ? 'warning' : processedRows.length ? 'success' : 'neutral'}
+          <StatTile label="Rows Parsed" value={liveUpload.rows.length + changeUpload.rows.length} />
+          <StatTile
+            label="Output Rows"
+            value={processedRows.length}
+            tone={processedRows.length ? 'success' : 'default'}
           />
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.45fr_0.75fr]">
-          <div className="space-y-6">
-            <SectionShell
-              eyebrow="Source Intake"
-              title="Load the roster anchor and the change history"
-              detail="Each upload is parsed as soon as it lands so the mapping step can be auto-seeded from recognizable column names."
-              aside={
-                <div className="rounded-full bg-[color:var(--surface-alt)] px-4 py-2 text-sm text-[color:var(--muted-deep)]">
-                  {isParsing ? 'Parsing files...' : readyForMapping ? 'Both files loaded' : 'Waiting for uploads'}
-                </div>
-              }
-            >
-              <div className="grid gap-5 lg:grid-cols-2">
-                <UploadCard
-                  label="Live Roster"
-                  helperText="This is the anchor table. One row per rep, with the current team and manager state."
-                  file={liveUpload.file}
-                  rowCount={liveUpload.rows.length}
-                  headerCount={liveUpload.headers.length}
-                  onChange={(file) => handleUpload('live', file)}
-                />
-                <UploadCard
-                  label="SFDC Change Log"
-                  helperText="This is the historical change table. Multiple rows per rep are expected."
-                  file={changeUpload.file}
-                  rowCount={changeUpload.rows.length}
-                  headerCount={changeUpload.headers.length}
-                  onChange={(file) => handleUpload('change', file)}
-                />
-              </div>
-            </SectionShell>
+        <Section
+          title="1. Upload Files"
+          description="Load the live roster and the SFDC change log."
+        >
+          <div className="grid gap-4 lg:grid-cols-2">
+            <UploadCard
+              label="Live Roster"
+              helperText="One row per rep. This acts as the anchor table."
+              file={liveUpload.file}
+              rowCount={liveUpload.rows.length}
+              headerCount={liveUpload.headers.length}
+              onChange={(file) => handleUpload('live', file)}
+            />
+            <UploadCard
+              label="SFDC Change Log"
+              helperText="Multiple rows per rep. This provides the historical changes."
+              file={changeUpload.file}
+              rowCount={changeUpload.rows.length}
+              headerCount={changeUpload.headers.length}
+              onChange={(file) => handleUpload('change', file)}
+            />
+          </div>
+        </Section>
 
-            {readyForMapping ? (
-              <div className="space-y-6">
+        <Section
+          title="2. Map Columns"
+          description="Required fields must be mapped before processing can run."
+          right={
+            <div className="text-sm text-[color:var(--muted)]">
+              {isParsing ? 'Parsing files...' : readyForMapping ? 'Mappings are editable' : 'Waiting for files'}
+            </div>
+          }
+        >
+          {readyForMapping ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Notice tone={liveMissingMappings.length ? 'warning' : 'default'}>
+                  Live roster missing required fields:{' '}
+                  {liveMissingMappings.length
+                    ? liveMissingMappings.map((field) => field.label).join(', ')
+                    : 'none'}
+                </Notice>
+                <Notice tone={changeMissingMappings.length ? 'warning' : 'default'}>
+                  Change log missing required fields:{' '}
+                  {changeMissingMappings.length
+                    ? changeMissingMappings.map((field) => field.label).join(', ')
+                    : 'none'}
+                </Notice>
+              </div>
+              <div className="grid gap-6 xl:grid-cols-2">
                 <MappingPanel
-                  title="Map Live Roster Columns"
-                  description="Choose the uploaded columns that should feed the standard anchor schema. This keeps the stitcher stable even when team-specific naming varies."
+                  title="Live Roster Schema"
                   schema={LIVE_SCHEMA}
                   headers={liveUpload.headers}
                   mapping={mappings.live}
-                  rowCount={liveUpload.rows.length}
                   onChange={(fieldKey, value) => handleMappingChange('live', fieldKey, value)}
                 />
                 <MappingPanel
-                  title="Map Change Log Columns"
-                  description="Choose the uploaded columns that should feed the standard history schema used by the SCD timeline logic."
+                  title="Change Log Schema"
                   schema={CHANGE_SCHEMA}
                   headers={changeUpload.headers}
                   mapping={mappings.change}
-                  rowCount={changeUpload.rows.length}
                   onChange={(fieldKey, value) => handleMappingChange('change', fieldKey, value)}
                 />
               </div>
-            ) : (
-              <SectionShell
-                eyebrow="Schema Mapping"
-                title="Mapping unlocks after both files are uploaded"
-                detail="Once both CSVs are present, the app will suggest a mapping based on common aliases and let you confirm the standard schema before processing."
-                tone="warning"
+            </div>
+          ) : (
+            <Notice>Upload both files to unlock the mapping step.</Notice>
+          )}
+        </Section>
+
+        <Section
+          title="3. Process and Export"
+          description="Generate the merged historical roster, review the first 50 rows, then export the full dataset."
+          right={
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
+                type="button"
+                disabled={isProcessing || !readyToProcess}
+                onClick={handleProcess}
               >
-                <div className="rounded-[1.75rem] border border-dashed border-[color:var(--warn-soft)] bg-white/70 px-5 py-8 text-center text-sm leading-7 text-[color:var(--muted-deep)]">
-                  Upload both files to open the mapping workbench.
-                </div>
-              </SectionShell>
-            )}
+                {isProcessing ? 'Processing...' : 'Process Data'}
+              </button>
+              <button
+                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] disabled:cursor-not-allowed disabled:text-[color:var(--muted)]"
+                type="button"
+                disabled={!processedRows.length}
+                onClick={() => downloadCsv(processedRows)}
+              >
+                Export CSV
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            {error ? <Notice tone="error">{error}</Notice> : null}
 
-            <SectionShell
-              eyebrow="Output"
-              title="Preview the stitched roster"
-              detail="The preview table reflects the standardized schema and SCD merge logic. Only the first 50 rows are shown here; export downloads the full result."
-              aside={
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    className="rounded-full bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-strong)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted-deep)]"
-                    type="button"
-                    disabled={isProcessing || !readyToProcess}
-                    onClick={handleProcess}
-                  >
-                    {isProcessing ? 'Processing...' : 'Process Data'}
-                  </button>
-                  <button
-                    className="rounded-full border border-[color:var(--line)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--ink-strong)] transition hover:border-[color:var(--brand-soft)] hover:text-[color:var(--brand)] disabled:cursor-not-allowed disabled:text-[color:var(--muted-deep)]"
-                    type="button"
-                    disabled={!processedRows.length}
-                    onClick={() => downloadCsv(processedRows)}
-                  >
-                    Export CSV
-                  </button>
-                </div>
-              }
-              tone="dark"
-            >
-              <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white text-[color:var(--ink)]">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
-                    <thead className="bg-[color:var(--surface-alt)]">
-                      <tr>
-                        {OUTPUT_COLUMNS.map((column) => (
-                          <th
-                            key={column}
-                            className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--muted-deep)]"
-                          >
-                            {column}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[color:var(--line)] bg-white">
-                      {previewRows.length > 0 ? (
-                        previewRows.map((row, index) => (
-                          <tr
-                            key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}
-                            className="transition hover:bg-[color:var(--surface-alt)]"
-                          >
-                            {OUTPUT_COLUMNS.map((column) => (
-                              <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
-                                {String(row[column] ?? '')}
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan={OUTPUT_COLUMNS.length}
-                            className="px-4 py-16 text-center text-sm text-[color:var(--muted-deep)]"
-                          >
-                            Upload files, finish the required mappings, and run processing to generate the roster preview.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </SectionShell>
-          </div>
-
-          <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-            <SidebarCard
-              title="Run Readiness"
-              detail="The workflow should make the next action obvious. This panel surfaces the blockers."
-              tone={readyToProcess ? 'success' : currentStage > 1 ? 'warning' : 'neutral'}
-            >
-              <div className="space-y-3">
-                <ChecklistItem label="Live roster uploaded" done={Boolean(liveUpload.file)} />
-                <ChecklistItem label="Change log uploaded" done={Boolean(changeUpload.file)} />
-                <ChecklistItem
-                  label="Required live fields mapped"
-                  done={liveMissingMappings.length === 0 && Boolean(liveUpload.file)}
-                  tone="warning"
-                />
-                <ChecklistItem
-                  label="Required change fields mapped"
-                  done={changeMissingMappings.length === 0 && Boolean(changeUpload.file)}
-                  tone="warning"
-                />
-                <ChecklistItem label="Ready to process" done={readyToProcess} tone="primary" />
-              </div>
-            </SidebarCard>
-
-            <StandardSchemaCard
-              title="Live Roster Standard Schema"
-              schema={LIVE_SCHEMA}
-              missingMappings={liveMissingMappings}
-            />
-
-            <StandardSchemaCard
-              title="Change Log Standard Schema"
-              schema={CHANGE_SCHEMA}
-              missingMappings={changeMissingMappings}
-            />
-
-            {error ? (
-              <SidebarCard title="Parse or Process Error" detail={error} tone="danger" />
+            {issues.length > 0 ? (
+              <Notice tone="warning">
+                {issues.length} data quality note{issues.length === 1 ? '' : 's'} found. Review the
+                details below before export.
+              </Notice>
             ) : null}
 
-            <SidebarCard
-              title="Data Quality"
-              detail={
-                issues.length
-                  ? 'The current output includes validation notes. Review them before export.'
-                  : 'No validation notes have been generated yet.'
-              }
-              tone={issues.length ? 'warning' : processedRows.length ? 'success' : 'neutral'}
-            >
-              {issues.length ? (
-                <div className="space-y-2">
-                  {issues.slice(0, 8).map((issue) => (
-                    <div
-                      key={issue}
-                      className="rounded-[1rem] border border-black/10 bg-white/80 px-4 py-3 text-sm text-[color:var(--ink-strong)]"
-                    >
-                      {issue}
-                    </div>
-                  ))}
-                  {issues.length > 8 ? (
-                    <div className="text-xs font-medium uppercase tracking-[0.22em] text-[color:var(--muted-deep)]">
-                      {issues.length - 8} more notes are hidden here but remain available in the state.
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="rounded-[1rem] border border-black/10 bg-white/80 px-4 py-4 text-sm text-[color:var(--muted-deep)]">
-                  Process a dataset to see duplicate IDs, invalid dates, or missing required row values.
-                </div>
-              )}
-            </SidebarCard>
-
-            <SidebarCard
-              title="What changed from the last version"
-              detail="The visual language now follows the dashboard brief without turning the workflow into a chart-heavy dashboard."
-            >
-              <div className="space-y-3 text-sm leading-6 text-[color:var(--muted-deep)]">
-                <p>The page now leads with workflow state and decision cues rather than generic utility styling.</p>
-                <p>Orange drives primary action, cyan marks completion, yellow flags work-in-progress, and issue handling stays visible in the right rail.</p>
-                <p>The layout is intentionally asymmetric: workbench on the left, operational status on the right.</p>
+            <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
+                  <thead className="bg-[color:var(--surface-soft)]">
+                    <tr>
+                      {OUTPUT_COLUMNS.map((column) => (
+                        <th
+                          key={column}
+                          className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]"
+                        >
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[color:var(--line)] bg-white">
+                    {previewRows.length > 0 ? (
+                      previewRows.map((row, index) => (
+                        <tr key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}>
+                          {OUTPUT_COLUMNS.map((column) => (
+                            <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
+                              {String(row[column] ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={OUTPUT_COLUMNS.length}
+                          className="px-4 py-16 text-center text-sm text-[color:var(--muted)]"
+                        >
+                          Process the files to populate the preview table.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </SidebarCard>
-          </aside>
-        </div>
+            </div>
+
+            {issues.length > 0 ? (
+              <div className="space-y-2">
+                {issues.slice(0, 8).map((issue) => (
+                  <div
+                    key={issue}
+                    className="rounded-lg border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)] px-4 py-3 text-sm text-[color:var(--ink)]"
+                  >
+                    {issue}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </Section>
       </div>
     </main>
   );

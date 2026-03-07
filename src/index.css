@@ -3,32 +3,21 @@
 @tailwind utilities;
 
 :root {
-  --surface: #f7f3ed;
-  --panel: #fffdfa;
-  --surface-alt: #f4ede3;
+  --surface: #ffffff;
+  --surface-soft: #f7f7f5;
   --ink: #262f30;
-  --ink-strong: #1f2728;
-  --muted: #9fa5ac;
-  --muted-deep: #64748b;
-  --line: #d7d4ce;
+  --muted: #66717a;
+  --line: #e2e8f0;
   --brand: #ff4500;
-  --brand-strong: #ff7300;
-  --brand-soft: #ff8340;
-  --brand-ring: rgba(255, 69, 0, 0.2);
-  --success: #00d8a5;
-  --success-soft: #9bead7;
-  --success-bg: #e7fcf6;
-  --warn: #ffcf30;
-  --warn-soft: #f6dea0;
-  --warn-bg: #fff5cf;
-  --danger: #e74729;
-  --danger-soft: #f3b3a7;
+  --brand-hover: #ff7300;
+  --success-bg: #e9fbf6;
+  --success-line: #bdebdc;
+  --warn-bg: #fff7d6;
+  --warn-line: #eed27c;
   --danger-bg: #fff0ec;
+  --danger-line: #f0baa9;
   color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(255, 131, 64, 0.18), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(0, 216, 165, 0.12), transparent 24%),
-    linear-gradient(180deg, #fffdfa 0%, #f5efe7 100%);
+  background: var(--surface);
   font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
 }
 
@@ -36,11 +25,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(rgba(159, 165, 172, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(159, 165, 172, 0.08) 1px, transparent 1px),
-    linear-gradient(180deg, #fffdfa 0%, #f5efe7 100%);
-  background-size: 36px 36px, 36px 36px, 100% 100%;
+  background: var(--surface);
 }
 
 #root {
@@ -53,5 +38,5 @@ body {
 
 ::selection {
   background: rgba(255, 69, 0, 0.18);
-  color: var(--ink-strong);
+  color: var(--ink);
 }
