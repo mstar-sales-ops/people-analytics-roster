@@ -2,10 +2,13 @@ import { useMemo, useState } from 'react';
 import Papa from 'papaparse';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
-const OUTPUT_COLUMNS = [
+const PREVIEW_COLUMNS = [
   'Salesforce ID',
+  'Full Name',
   'Team',
   'Manager',
+  'Segment',
+  'Function Origin',
   'Start Date',
   'End Date',
   'Is_Active',
@@ -13,6 +16,7 @@ const OUTPUT_COLUMNS = [
 
 const LIVE_SCHEMA = [
   { key: 'SFDC_ID', label: 'SFDC_ID', required: true, description: 'Unique rep identifier' },
+  { key: 'Full_Name', label: 'Full_Name', required: false, description: 'Readable rep name' },
   { key: 'Hire_Date', label: 'Hire_Date', required: true, description: 'Employee start date' },
   {
     key: 'Termination_Date',
@@ -22,10 +26,18 @@ const LIVE_SCHEMA = [
   },
   { key: 'Team', label: 'Team', required: true, description: 'Current team or segment' },
   { key: 'Manager', label: 'Manager', required: true, description: 'Current manager name' },
+  { key: 'Segment', label: 'Segment', required: false, description: 'Optional business segment' },
+  {
+    key: 'Function_Origin',
+    label: 'Function_Origin',
+    required: false,
+    description: 'Optional function family',
+  },
 ];
 
 const CHANGE_SCHEMA = [
   { key: 'SFDC_ID', label: 'SFDC_ID', required: true, description: 'Unique rep identifier' },
+  { key: 'Full_Name', label: 'Full_Name', required: false, description: 'Readable rep name' },
   {
     key: 'Change_Date',
     label: 'Change_Date',
@@ -34,21 +46,96 @@ const CHANGE_SCHEMA = [
   },
   { key: 'Team', label: 'Team', required: true, description: 'New team after the change' },
   { key: 'Manager', label: 'Manager', required: true, description: 'New manager after the change' },
+  { key: 'Segment', label: 'Segment', required: false, description: 'Optional business segment' },
+  {
+    key: 'Function_Origin',
+    label: 'Function_Origin',
+    required: false,
+    description: 'Optional function family',
+  },
 ];
 
 const HEADER_HINTS = {
-  SFDC_ID: ['Salesforce ID', 'SalesforceId', 'SFDC ID', 'Rep ID', 'User ID'],
+  SFDC_ID: ['Salesforce ID', 'Salesforce User ID', 'SalesforceId', 'SFDC ID', 'Rep ID', 'User ID'],
+  Full_Name: ['Full Name', 'Name', 'Employee Name'],
   Hire_Date: ['Hire Date', 'Start Date', 'HireDate'],
   Termination_Date: ['Termination Date', 'Term Date', 'End Date', 'TerminationDate'],
-  Team: ['Current Team', 'New Team', 'Team', 'CurrentTeam', 'NewTeam'],
+  Team: ['Current Team', 'New Team', 'Team', 'CurrentTeam', 'NewTeam', 'Pod', 'Updated POD', 'role_name'],
   Manager: ['Current Manager', 'New Manager', 'Manager', 'CurrentManager', 'NewManager'],
-  Change_Date: ['Change Date', 'Effective Date', 'ChangeDate'],
+  Segment: ['Segment'],
+  Function_Origin: ['Function Origin', 'FunctionOrigin'],
+  Change_Date: ['Change Date', 'Effective Date', 'ChangeDate', 'start_date'],
 };
 
 const EMPTY_UPLOAD = {
   file: null,
   headers: [],
   rows: [],
+};
+
+const EXAMPLE_RECORD = {
+  liveRoster: {
+    SFDC_ID: '0058A00000EXAMPLE',
+    Hire_Date: '2022-01-10',
+    Termination_Date: '',
+    Team: 'Mid-Market',
+    Manager: 'Taylor Chen',
+  },
+  changeLog: [
+    {
+      Change_Date: '2022-01-10',
+      Team: 'SMB',
+      Manager: 'Jamie Lee',
+      note: 'Opening state at hire',
+    },
+    {
+      Change_Date: '2023-06-01',
+      Team: 'Enterprise',
+      Manager: 'Jamie Lee',
+      note: 'Team move',
+    },
+    {
+      Change_Date: '2024-02-15',
+      Team: '',
+      Manager: 'Taylor Chen',
+      note: 'Manager change',
+    },
+    {
+      Change_Date: '2024-02-15',
+      Team: 'Mid-Market',
+      Manager: '',
+      note: 'Same-day team change',
+    },
+  ],
+  output: [
+    {
+      'Salesforce ID': '0058A00000EXAMPLE',
+      Team: 'SMB',
+      Manager: 'Jamie Lee',
+      'Start Date': '2022-01-10',
+      'End Date': '2023-05-31',
+      Is_Active: 'false',
+      why: 'Opened from the first change-log row and closed the day before the next change.',
+    },
+    {
+      'Salesforce ID': '0058A00000EXAMPLE',
+      Team: 'Enterprise',
+      Manager: 'Jamie Lee',
+      'Start Date': '2023-06-01',
+      'End Date': '2024-02-14',
+      Is_Active: 'false',
+      why: 'Opened by the 2023-06-01 change and closed by the next effective date.',
+    },
+    {
+      'Salesforce ID': '0058A00000EXAMPLE',
+      Team: 'Mid-Market',
+      Manager: 'Taylor Chen',
+      'Start Date': '2024-02-15',
+      'End Date': '',
+      Is_Active: 'true',
+      why: 'Same-day change rows are consolidated, then the final open row stays active because the live roster has no termination date.',
+    },
+  ],
 };
 
 function normalizeHeader(value) {
@@ -175,13 +262,27 @@ function getMissingRequiredMappings(mapping, schema) {
 }
 
 function transformRowsToSchema(rows, mapping, schema) {
-  return rows.map((row) =>
-    schema.reduce((record, field) => {
+  const mappedHeaders = new Set(Object.values(mapping).filter(Boolean));
+
+  return rows.map((row) => {
+    const record = schema.reduce((current, field) => {
       const sourceHeader = mapping[field.key];
-      record[field.key] = sourceHeader ? cleanValue(row[sourceHeader]) : '';
-      return record;
-    }, {}),
-  );
+      current[field.key] = sourceHeader ? cleanValue(row[sourceHeader]) : '';
+      return current;
+    }, {});
+
+    record.__passthrough = Object.entries(row).reduce((current, [header, value]) => {
+      const cleanHeader = cleanValue(header);
+      if (!cleanHeader || mappedHeaders.has(header)) {
+        return current;
+      }
+
+      current[cleanHeader] = cleanValue(value);
+      return current;
+    }, {});
+
+    return record;
+  });
 }
 
 function consolidateChangesForRep(changes) {
@@ -201,6 +302,10 @@ function consolidateChangesForRep(changes) {
     if (last && last.changeDate === change.changeDate) {
       last.team = change.team || last.team;
       last.manager = change.manager || last.manager;
+      last.fullName = change.fullName || last.fullName;
+      last.segment = change.segment || last.segment;
+      last.functionOrigin = change.functionOrigin || last.functionOrigin;
+      last.passthrough = { ...last.passthrough, ...change.passthrough };
       last.sequence = change.sequence;
       return;
     }
@@ -215,6 +320,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
   const issues = [];
   const liveById = new Map();
   const changesById = new Map();
+  const exportColumns = [...PREVIEW_COLUMNS];
 
   liveRows.forEach((row, index) => {
     const salesforceId = cleanValue(row.SFDC_ID);
@@ -235,10 +341,16 @@ function buildHistoricalRoster(liveRows, changeRows) {
 
     liveById.set(salesforceId, {
       salesforceId,
+      fullName: cleanValue(row.Full_Name),
       hireDate,
       terminationDate: parseDateInput(row.Termination_Date),
       currentTeam: cleanValue(row.Team),
       currentManager: cleanValue(row.Manager),
+      segment: cleanValue(row.Segment),
+      functionOrigin: cleanValue(row.Function_Origin),
+      passthrough: Object.fromEntries(
+        Object.entries(row.__passthrough ?? {}).map(([key, value]) => [`Live - ${key}`, value]),
+      ),
     });
   });
 
@@ -256,6 +368,12 @@ function buildHistoricalRoster(liveRows, changeRows) {
       changeDate,
       team: cleanValue(row.Team),
       manager: cleanValue(row.Manager),
+      fullName: cleanValue(row.Full_Name),
+      segment: cleanValue(row.Segment),
+      functionOrigin: cleanValue(row.Function_Origin),
+      passthrough: Object.fromEntries(
+        Object.entries(row.__passthrough ?? {}).map(([key, value]) => [`History - ${key}`, value]),
+      ),
       sequence: index,
     };
 
@@ -268,6 +386,33 @@ function buildHistoricalRoster(liveRows, changeRows) {
 
   const results = [];
 
+  function addExportColumns(row) {
+    Object.keys(row).forEach((key) => {
+      if (!exportColumns.includes(key)) {
+        exportColumns.push(key);
+      }
+    });
+  }
+
+  function buildOutputRow(rep, activeState, startDate, endDate) {
+    const row = {
+      'Salesforce ID': rep.salesforceId,
+      'Full Name': activeState.fullName || rep.fullName || '',
+      Team: activeState.team,
+      Manager: activeState.manager,
+      Segment: activeState.segment || rep.segment || '',
+      'Function Origin': activeState.functionOrigin || rep.functionOrigin || '',
+      'Start Date': formatDate(startDate),
+      'End Date': formatDate(endDate),
+      Is_Active: !endDate,
+      ...rep.passthrough,
+      ...(activeState.passthrough ?? {}),
+    };
+
+    addExportColumns(row);
+    return row;
+  }
+
   liveById.forEach((rep) => {
     const consolidatedChanges = consolidateChangesForRep(changesById.get(rep.salesforceId) ?? []);
     const firstKnownState = consolidatedChanges[0] ?? {};
@@ -275,6 +420,10 @@ function buildHistoricalRoster(liveRows, changeRows) {
     let activeState = {
       team: firstKnownState.team || rep.currentTeam || '',
       manager: firstKnownState.manager || rep.currentManager || '',
+      fullName: firstKnownState.fullName || rep.fullName || '',
+      segment: firstKnownState.segment || rep.segment || '',
+      functionOrigin: firstKnownState.functionOrigin || rep.functionOrigin || '',
+      passthrough: firstKnownState.passthrough || {},
     };
     let activeStart = rep.hireDate;
 
@@ -283,6 +432,10 @@ function buildHistoricalRoster(liveRows, changeRows) {
         activeState = {
           team: change.team || activeState.team,
           manager: change.manager || activeState.manager,
+          fullName: change.fullName || activeState.fullName,
+          segment: change.segment || activeState.segment,
+          functionOrigin: change.functionOrigin || activeState.functionOrigin,
+          passthrough: { ...activeState.passthrough, ...(change.passthrough ?? {}) },
         };
         return;
       }
@@ -291,44 +444,48 @@ function buildHistoricalRoster(liveRows, changeRows) {
         activeState = {
           team: change.team || activeState.team,
           manager: change.manager || activeState.manager,
+          fullName: change.fullName || activeState.fullName,
+          segment: change.segment || activeState.segment,
+          functionOrigin: change.functionOrigin || activeState.functionOrigin,
+          passthrough: { ...activeState.passthrough, ...(change.passthrough ?? {}) },
         };
         return;
       }
 
-      results.push({
-        'Salesforce ID': rep.salesforceId,
-        Team: activeState.team,
-        Manager: activeState.manager,
-        'Start Date': formatDate(activeStart),
-        'End Date': formatDate(subtractOneDay(change.changeDate)),
-        Is_Active: false,
-      });
+      results.push(buildOutputRow(rep, activeState, activeStart, subtractOneDay(change.changeDate)));
 
       activeStart = change.changeDate;
       activeState = {
         team: change.team || activeState.team,
         manager: change.manager || activeState.manager,
+        fullName: change.fullName || activeState.fullName,
+        segment: change.segment || activeState.segment,
+        functionOrigin: change.functionOrigin || activeState.functionOrigin,
+        passthrough: change.passthrough || {},
       };
     });
 
-    if (rep.currentTeam || rep.currentManager) {
+    if (
+      rep.currentTeam ||
+      rep.currentManager ||
+      rep.fullName ||
+      rep.segment ||
+      rep.functionOrigin
+    ) {
       activeState = {
         team: rep.currentTeam || activeState.team,
         manager: rep.currentManager || activeState.manager,
+        fullName: rep.fullName || activeState.fullName,
+        segment: rep.segment || activeState.segment,
+        functionOrigin: rep.functionOrigin || activeState.functionOrigin,
+        passthrough: activeState.passthrough,
       };
     }
 
     const finalEndDate =
       rep.terminationDate && rep.terminationDate >= activeStart ? rep.terminationDate : null;
 
-    results.push({
-      'Salesforce ID': rep.salesforceId,
-      Team: activeState.team,
-      Manager: activeState.manager,
-      'Start Date': formatDate(activeStart),
-      'End Date': formatDate(finalEndDate),
-      Is_Active: !finalEndDate,
-    });
+    results.push(buildOutputRow(rep, activeState, activeStart, finalEndDate));
   });
 
   return {
@@ -344,13 +501,14 @@ function buildHistoricalRoster(liveRows, changeRows) {
       reps: liveById.size,
       changeRows: changeRows.length,
     },
+    exportColumns,
   };
 }
 
-function downloadCsv(rows) {
+function downloadCsv(rows, columns) {
   const csv = Papa.unparse({
-    fields: OUTPUT_COLUMNS,
-    data: rows.map((row) => OUTPUT_COLUMNS.map((column) => row[column] ?? '')),
+    fields: columns,
+    data: rows.map((row) => columns.map((column) => row[column] ?? '')),
   });
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -495,6 +653,58 @@ function Notice({ tone = 'default', children }) {
   return <div className={`rounded-xl border px-4 py-3 text-sm text-[color:var(--ink)] ${toneClass}`}>{children}</div>;
 }
 
+function SourceTag({ children, tone = 'default' }) {
+  const toneClass =
+    tone === 'history'
+      ? 'bg-[color:var(--warn-bg)] text-[color:var(--ink)]'
+      : tone === 'output'
+        ? 'bg-[color:var(--success-bg)] text-[color:var(--ink)]'
+        : 'bg-[color:var(--surface-soft)] text-[color:var(--muted)]';
+
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${toneClass}`}>
+      {children}
+    </span>
+  );
+}
+
+function ExampleTable({ columns, rows, tone = 'default' }) {
+  const headerClass =
+    tone === 'output' ? 'bg-[color:var(--success-bg)]' : 'bg-[color:var(--surface-soft)]';
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
+          <thead className={headerClass}>
+            <tr>
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[color:var(--line)] bg-white">
+            {rows.map((row, index) => (
+              <tr key={`${columns[0]}-${index}`}>
+                {columns.map((column) => (
+                  <td key={column} className="px-4 py-3 align-top text-[color:var(--ink)]">
+                    {row[column] || '—'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [liveUpload, setLiveUpload] = useState(EMPTY_UPLOAD);
   const [changeUpload, setChangeUpload] = useState(EMPTY_UPLOAD);
@@ -505,6 +715,7 @@ export default function App() {
   const [issues, setIssues] = useState([]);
   const [processedRows, setProcessedRows] = useState([]);
   const [stats, setStats] = useState({ reps: 0, changeRows: 0 });
+  const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
 
   const liveMissingMappings = useMemo(
     () => getMissingRequiredMappings(mappings.live, LIVE_SCHEMA),
@@ -534,6 +745,7 @@ export default function App() {
     setIssues([]);
     setProcessedRows([]);
     setStats({ reps: 0, changeRows: 0 });
+    setExportColumns(PREVIEW_COLUMNS);
 
     if (!file) {
       if (kind === 'live') {
@@ -594,6 +806,7 @@ export default function App() {
     setProcessedRows([]);
     setIssues([]);
     setStats({ reps: 0, changeRows: 0 });
+    setExportColumns(PREVIEW_COLUMNS);
 
     setMappings((current) => ({
       ...current,
@@ -630,9 +843,11 @@ export default function App() {
       setProcessedRows(output.rows);
       setIssues(output.issues);
       setStats(output.stats);
+      setExportColumns(output.exportColumns);
     } catch (processingError) {
       setProcessedRows([]);
       setStats({ reps: 0, changeRows: 0 });
+      setExportColumns(PREVIEW_COLUMNS);
       setError(processingError.message || 'The uploaded data could not be transformed.');
     } finally {
       setIsProcessing(false);
@@ -773,7 +988,7 @@ export default function App() {
                 className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] disabled:cursor-not-allowed disabled:text-[color:var(--muted)]"
                 type="button"
                 disabled={!processedRows.length}
-                onClick={() => downloadCsv(processedRows)}
+                onClick={() => downloadCsv(processedRows, exportColumns)}
               >
                 Export CSV
               </button>
@@ -795,7 +1010,7 @@ export default function App() {
                 <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
                   <thead className="bg-[color:var(--surface-soft)]">
                     <tr>
-                      {OUTPUT_COLUMNS.map((column) => (
+                      {PREVIEW_COLUMNS.map((column) => (
                         <th
                           key={column}
                           className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]"
@@ -809,7 +1024,7 @@ export default function App() {
                     {previewRows.length > 0 ? (
                       previewRows.map((row, index) => (
                         <tr key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}>
-                          {OUTPUT_COLUMNS.map((column) => (
+                          {PREVIEW_COLUMNS.map((column) => (
                             <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
                               {String(row[column] ?? '')}
                             </td>
@@ -819,7 +1034,7 @@ export default function App() {
                     ) : (
                       <tr>
                         <td
-                          colSpan={OUTPUT_COLUMNS.length}
+                          colSpan={PREVIEW_COLUMNS.length}
                           className="px-4 py-16 text-center text-sm text-[color:var(--muted)]"
                         >
                           Process the files to populate the preview table.
@@ -843,6 +1058,69 @@ export default function App() {
                 ))}
               </div>
             ) : null}
+          </div>
+        </Section>
+
+        <Section
+          title="Example Output"
+          description="This uses the universal core fields for stitching, then appends the rest of the source columns to the export with clear prefixes."
+        >
+          <div className="space-y-5">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">Live roster row</div>
+                  <SourceTag>Comes from roster</SourceTag>
+                </div>
+                <ExampleTable
+                  columns={['SFDC_ID', 'Hire_Date', 'Termination_Date', 'Team', 'Manager']}
+                  rows={[EXAMPLE_RECORD.liveRoster]}
+                />
+                <div className="text-sm leading-6 text-[color:var(--muted)]">
+                  The live roster gives the universal anchor fields: rep ID, hire date, optional
+                  termination date, current team, current manager, plus any extra roster columns
+                  that should ride along in the export.
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">Historical change rows</div>
+                  <SourceTag tone="history">Comes from change log</SourceTag>
+                </div>
+                <ExampleTable
+                  columns={['Change_Date', 'Team', 'Manager', 'note']}
+                  rows={EXAMPLE_RECORD.changeLog}
+                />
+                <div className="text-sm leading-6 text-[color:var(--muted)]">
+                  The change log gives the universal history fields: rep ID, effective start date,
+                  team, and manager. Any extra history columns are preserved on the row they open.
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">What gets exported</div>
+                <SourceTag tone="output">Final stitched rows</SourceTag>
+              </div>
+              <ExampleTable columns={[...PREVIEW_COLUMNS, 'why']} rows={EXAMPLE_RECORD.output} tone="output" />
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-3">
+              <Notice>
+                <strong>Universal core:</strong> `SFDC_ID`, start date, team, and manager are the
+                minimal fields that make this type of stitcher work across teams.
+              </Notice>
+              <Notice>
+                <strong>Still exported:</strong> everything else from the live roster or history
+                files can be appended as `Live - ...` or `History - ...` columns.
+              </Notice>
+              <Notice>
+                <strong>Preview vs export:</strong> the preview stays focused on the universal
+                stitched columns, while the CSV download includes the additional source fields.
+              </Notice>
+            </div>
           </div>
         </Section>
       </div>
