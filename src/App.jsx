@@ -11,19 +11,44 @@ const OUTPUT_COLUMNS = [
   'Is_Active',
 ];
 
-const LIVE_ALIASES = {
-  salesforceId: ['Salesforce ID', 'SalesforceId', 'SFDC ID', 'Rep ID', 'User ID'],
-  hireDate: ['Hire Date', 'Start Date', 'HireDate'],
-  terminationDate: ['Termination Date', 'Term Date', 'End Date', 'TerminationDate'],
-  currentTeam: ['Current Team', 'Team', 'CurrentTeam'],
-  currentManager: ['Current Manager', 'Manager', 'CurrentManager'],
+const LIVE_SCHEMA = [
+  { key: 'SFDC_ID', label: 'SFDC_ID', required: true, description: 'Unique rep identifier' },
+  { key: 'Hire_Date', label: 'Hire_Date', required: true, description: 'Employee start date' },
+  {
+    key: 'Termination_Date',
+    label: 'Termination_Date',
+    required: false,
+    description: 'Leave blank if the rep is active',
+  },
+  { key: 'Team', label: 'Team', required: true, description: 'Current team or segment' },
+  { key: 'Manager', label: 'Manager', required: true, description: 'Current manager name' },
+];
+
+const CHANGE_SCHEMA = [
+  { key: 'SFDC_ID', label: 'SFDC_ID', required: true, description: 'Unique rep identifier' },
+  {
+    key: 'Change_Date',
+    label: 'Change_Date',
+    required: true,
+    description: 'Effective date for the change',
+  },
+  { key: 'Team', label: 'Team', required: true, description: 'New team after the change' },
+  { key: 'Manager', label: 'Manager', required: true, description: 'New manager after the change' },
+];
+
+const HEADER_HINTS = {
+  SFDC_ID: ['Salesforce ID', 'SalesforceId', 'SFDC ID', 'Rep ID', 'User ID'],
+  Hire_Date: ['Hire Date', 'Start Date', 'HireDate'],
+  Termination_Date: ['Termination Date', 'Term Date', 'End Date', 'TerminationDate'],
+  Team: ['Current Team', 'New Team', 'Team', 'CurrentTeam', 'NewTeam'],
+  Manager: ['Current Manager', 'New Manager', 'Manager', 'CurrentManager', 'NewManager'],
+  Change_Date: ['Change Date', 'Effective Date', 'ChangeDate'],
 };
 
-const CHANGE_ALIASES = {
-  salesforceId: ['Salesforce ID', 'SalesforceId', 'SFDC ID', 'Rep ID', 'User ID'],
-  changeDate: ['Change Date', 'Effective Date', 'ChangeDate'],
-  newTeam: ['New Team', 'Team', 'NewTeam'],
-  newManager: ['New Manager', 'Manager', 'NewManager'],
+const EMPTY_UPLOAD = {
+  file: null,
+  headers: [],
+  rows: [],
 };
 
 function normalizeHeader(value) {
@@ -33,23 +58,8 @@ function normalizeHeader(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-function buildAccessor(row) {
-  const lookup = new Map();
-
-  Object.entries(row ?? {}).forEach(([key, value]) => {
-    lookup.set(normalizeHeader(key), value);
-  });
-
-  return (aliases) => {
-    for (const alias of aliases) {
-      const match = lookup.get(normalizeHeader(alias));
-      if (match !== undefined && String(match).trim() !== '') {
-        return String(match).trim();
-      }
-    }
-
-    return '';
-  };
+function cleanValue(value) {
+  return String(value ?? '').trim();
 }
 
 function parseDateInput(value) {
@@ -125,11 +135,55 @@ function parseCsvFile(file) {
           return;
         }
 
-        resolve(results.data ?? []);
+        const rows = results.data ?? [];
+        const headers = (results.meta?.fields ?? Object.keys(rows[0] ?? {})).filter((header) =>
+          cleanValue(header),
+        );
+
+        resolve({ rows, headers });
       },
       error: (error) => reject(error),
     });
   });
+}
+
+function suggestMappings(headers, schema) {
+  const usedHeaders = new Set();
+
+  return schema.reduce((mapping, field) => {
+    const match = headers.find((header) => {
+      if (usedHeaders.has(header)) {
+        return false;
+      }
+
+      return HEADER_HINTS[field.key]?.some(
+        (hint) => normalizeHeader(hint) === normalizeHeader(header),
+      );
+    });
+
+    if (match) {
+      usedHeaders.add(match);
+      mapping[field.key] = match;
+    } else {
+      mapping[field.key] = '';
+    }
+
+    return mapping;
+  }, {});
+}
+
+function getMissingRequiredMappings(mapping, schema) {
+  return schema.filter((field) => field.required && !mapping[field.key]);
+}
+
+function transformRowsToSchema(rows, mapping, schema) {
+  return rows.map((row) =>
+    schema.reduce((record, field) => {
+      const sourceHeader = mapping[field.key];
+      record[field.key] = sourceHeader ? cleanValue(row[sourceHeader]) : '';
+      return record;
+    }, {}),
+  );
 }
 
 function consolidateChangesForRep(changes) {
@@ -165,44 +219,45 @@ function buildHistoricalRoster(liveRows, changeRows) {
   const changesById = new Map();
 
   liveRows.forEach((row, index) => {
-    const getField = buildAccessor(row);
-    const salesforceId = getField(LIVE_ALIASES.salesforceId);
-
+    const salesforceId = cleanValue(row.SFDC_ID);
     if (!salesforceId) {
-      issues.push(`Live Roster row ${index + 2}: missing Salesforce ID.`);
+      issues.push(`Live Roster row ${index + 2}: missing SFDC_ID.`);
       return;
     }
 
-    const hireDate = parseDateInput(getField(LIVE_ALIASES.hireDate));
+    const hireDate = parseDateInput(row.Hire_Date);
     if (!hireDate) {
-      issues.push(`Live Roster row ${index + 2}: invalid Hire Date for ${salesforceId}.`);
+      issues.push(`Live Roster row ${index + 2}: invalid Hire_Date for ${salesforceId}.`);
       return;
+    }
+
+    if (liveById.has(salesforceId)) {
+      issues.push(`Live Roster row ${index + 2}: duplicate SFDC_ID ${salesforceId}.`);
     }
 
     liveById.set(salesforceId, {
       salesforceId,
       hireDate,
-      terminationDate: parseDateInput(getField(LIVE_ALIASES.terminationDate)),
-      currentTeam: getField(LIVE_ALIASES.currentTeam),
-      currentManager: getField(LIVE_ALIASES.currentManager),
+      terminationDate: parseDateInput(row.Termination_Date),
+      currentTeam: cleanValue(row.Team),
+      currentManager: cleanValue(row.Manager),
     });
   });
 
   changeRows.forEach((row, index) => {
-    const getField = buildAccessor(row);
-    const salesforceId = getField(CHANGE_ALIASES.salesforceId);
-    const changeDate = parseDateInput(getField(CHANGE_ALIASES.changeDate));
+    const salesforceId = cleanValue(row.SFDC_ID);
+    const changeDate = parseDateInput(row.Change_Date);
 
     if (!salesforceId || !changeDate) {
-      issues.push(`Change Log row ${index + 2}: missing Salesforce ID or Change Date.`);
+      issues.push(`Change Log row ${index + 2}: missing SFDC_ID or Change_Date.`);
       return;
     }
 
     const entry = {
       salesforceId,
       changeDate,
-      team: getField(CHANGE_ALIASES.newTeam),
-      manager: getField(CHANGE_ALIASES.newManager),
+      team: cleanValue(row.Team),
+      manager: cleanValue(row.Manager),
       sequence: index,
     };
 
@@ -334,6 +389,77 @@ function UploadCard({ label, helperText, file, onChange }) {
   );
 }
 
+function MappingPanel({
+  title,
+  description,
+  schema,
+  headers,
+  mapping,
+  rowCount,
+  onChange,
+}) {
+  return (
+    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <p className="mt-1 text-sm text-slate-600">{description}</p>
+        </div>
+        <div className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          {rowCount} rows parsed · {headers.length} headers found
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-4">
+        {schema.map((field) => (
+          <div
+            key={field.key}
+            className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1.1fr_1.3fr]"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-950">{field.label}</span>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+                    field.required
+                      ? 'bg-cyan-100 text-cyan-900'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {field.required ? 'Required' : 'Optional'}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600">{field.description}</p>
+            </div>
+
+            <div className="space-y-2">
+              <select
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200"
+                value={mapping[field.key] ?? ''}
+                onChange={(event) => onChange(field.key, event.target.value)}
+              >
+                <option value="">
+                  {field.required ? 'Select a source column' : 'Leave unmapped'}
+                </option>
+                {headers.map((header) => (
+                  <option key={header} value={header}>
+                    {header}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                {mapping[field.key]
+                  ? `Mapped from "${mapping[field.key]}".`
+                  : 'No source column selected yet.'}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function StatCard({ label, value }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -344,19 +470,111 @@ function StatCard({ label, value }) {
 }
 
 export default function App() {
-  const [liveFile, setLiveFile] = useState(null);
-  const [changeFile, setChangeFile] = useState(null);
+  const [liveUpload, setLiveUpload] = useState(EMPTY_UPLOAD);
+  const [changeUpload, setChangeUpload] = useState(EMPTY_UPLOAD);
+  const [mappings, setMappings] = useState({ live: {}, change: {} });
+  const [isParsing, setIsParsing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [issues, setIssues] = useState([]);
   const [processedRows, setProcessedRows] = useState([]);
   const [stats, setStats] = useState({ reps: 0, changeRows: 0 });
 
+  const liveMissingMappings = useMemo(
+    () => getMissingRequiredMappings(mappings.live, LIVE_SCHEMA),
+    [mappings.live],
+  );
+  const changeMissingMappings = useMemo(
+    () => getMissingRequiredMappings(mappings.change, CHANGE_SCHEMA),
+    [mappings.change],
+  );
   const previewRows = useMemo(() => processedRows.slice(0, 50), [processedRows]);
 
+  const readyForMapping = liveUpload.file && changeUpload.file;
+  const readyToProcess =
+    readyForMapping &&
+    liveMissingMappings.length === 0 &&
+    changeMissingMappings.length === 0 &&
+    !isParsing;
+
+  async function handleUpload(kind, file) {
+    setError('');
+    setIssues([]);
+    setProcessedRows([]);
+    setStats({ reps: 0, changeRows: 0 });
+
+    if (!file) {
+      if (kind === 'live') {
+        setLiveUpload(EMPTY_UPLOAD);
+      } else {
+        setChangeUpload(EMPTY_UPLOAD);
+      }
+
+      setMappings((current) => ({
+        ...current,
+        [kind]: {},
+      }));
+      return;
+    }
+
+    setIsParsing(true);
+
+    try {
+      const parsedFile = await parseCsvFile(file);
+      const nextUpload = {
+        file,
+        headers: parsedFile.headers,
+        rows: parsedFile.rows,
+      };
+      const nextMapping = suggestMappings(
+        parsedFile.headers,
+        kind === 'live' ? LIVE_SCHEMA : CHANGE_SCHEMA,
+      );
+
+      if (kind === 'live') {
+        setLiveUpload(nextUpload);
+      } else {
+        setChangeUpload(nextUpload);
+      }
+
+      setMappings((current) => ({
+        ...current,
+        [kind]: nextMapping,
+      }));
+    } catch (uploadError) {
+      if (kind === 'live') {
+        setLiveUpload(EMPTY_UPLOAD);
+      } else {
+        setChangeUpload(EMPTY_UPLOAD);
+      }
+
+      setMappings((current) => ({
+        ...current,
+        [kind]: {},
+      }));
+      setError(uploadError.message || 'The CSV file could not be parsed.');
+    } finally {
+      setIsParsing(false);
+    }
+  }
+
+  function handleMappingChange(kind, fieldKey, value) {
+    setProcessedRows([]);
+    setIssues([]);
+    setStats({ reps: 0, changeRows: 0 });
+
+    setMappings((current) => ({
+      ...current,
+      [kind]: {
+        ...current[kind],
+        [fieldKey]: value,
+      },
+    }));
+  }
+
   async function handleProcess() {
-    if (!liveFile || !changeFile) {
-      setError('Upload both CSV files before processing.');
+    if (!readyToProcess) {
+      setError('Map every required standard field before processing.');
       return;
     }
 
@@ -365,19 +583,25 @@ export default function App() {
     setIsProcessing(true);
 
     try {
-      const [liveRows, changeRows] = await Promise.all([
-        parseCsvFile(liveFile),
-        parseCsvFile(changeFile),
-      ]);
+      const standardizedLiveRows = transformRowsToSchema(
+        liveUpload.rows,
+        mappings.live,
+        LIVE_SCHEMA,
+      );
+      const standardizedChangeRows = transformRowsToSchema(
+        changeUpload.rows,
+        mappings.change,
+        CHANGE_SCHEMA,
+      );
 
-      const output = buildHistoricalRoster(liveRows, changeRows);
+      const output = buildHistoricalRoster(standardizedLiveRows, standardizedChangeRows);
       setProcessedRows(output.rows);
       setIssues(output.issues);
       setStats(output.stats);
     } catch (processingError) {
       setProcessedRows([]);
       setStats({ reps: 0, changeRows: 0 });
-      setError(processingError.message || 'The CSV files could not be parsed.');
+      setError(processingError.message || 'The uploaded data could not be transformed.');
     } finally {
       setIsProcessing(false);
     }
@@ -396,8 +620,8 @@ export default function App() {
                 Historical Roster Builder
               </h1>
               <p className="text-sm leading-6 text-slate-600 sm:text-base">
-                Upload the Live Roster and SFDC Change Log, generate a browser-only SCD Type 2
-                history, review the first 50 rows, then export the full historical roster to CSV.
+                Upload two CSVs, map their column names into the MarketStar schema, then build a
+                browser-only historical roster and export the result.
               </p>
             </div>
           </div>
@@ -406,27 +630,92 @@ export default function App() {
         <section className="grid gap-5 lg:grid-cols-2">
           <UploadCard
             label="Live Roster"
-            helperText="One row per rep. Required fields: Salesforce ID, Hire Date, Termination Date, Current Team, Current Manager."
-            file={liveFile}
-            onChange={setLiveFile}
+            helperText="Upload the current roster. We will parse the headers immediately and ask you to map them into the standard schema."
+            file={liveUpload.file}
+            onChange={(file) => handleUpload('live', file)}
           />
           <UploadCard
             label="SFDC Change Log"
-            helperText="Multiple rows per rep. Required fields: Salesforce ID, Change Date, New Team, New Manager."
-            file={changeFile}
-            onChange={setChangeFile}
+            helperText="Upload the historical change log. Team-specific headers are fine as long as you map them before processing."
+            file={changeUpload.file}
+            onChange={(file) => handleUpload('change', file)}
           />
         </section>
 
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Mapping Gate</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Required fields must be mapped before the stitcher can run.
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">
+              {readyForMapping
+                ? `${LIVE_SCHEMA.length + CHANGE_SCHEMA.length - liveMissingMappings.length - changeMissingMappings.length} of ${
+                    LIVE_SCHEMA.length + CHANGE_SCHEMA.length
+                  } standard fields mapped`
+                : 'Upload both files to begin mapping'}
+            </div>
+          </div>
+
+          {readyForMapping ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900">
+                Live Roster missing required fields:{' '}
+                {liveMissingMappings.length
+                  ? liveMissingMappings.map((field) => field.label).join(', ')
+                  : 'none'}
+              </div>
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900">
+                Change Log missing required fields:{' '}
+                {changeMissingMappings.length
+                  ? changeMissingMappings.map((field) => field.label).join(', ')
+                  : 'none'}
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        {readyForMapping && (
+          <section className="grid gap-6 xl:grid-cols-2">
+            <MappingPanel
+              title="Map Live Roster Columns"
+              description="Choose which uploaded column should feed each standard field used by the roster anchor table."
+              schema={LIVE_SCHEMA}
+              headers={liveUpload.headers}
+              mapping={mappings.live}
+              rowCount={liveUpload.rows.length}
+              onChange={(fieldKey, value) => handleMappingChange('live', fieldKey, value)}
+            />
+            <MappingPanel
+              title="Map Change Log Columns"
+              description="Choose which uploaded column should feed each standard field used by the SFDC history table."
+              schema={CHANGE_SCHEMA}
+              headers={changeUpload.headers}
+              mapping={mappings.change}
+              rowCount={changeUpload.rows.length}
+              onChange={(fieldKey, value) => handleMappingChange('change', fieldKey, value)}
+            />
+          </section>
+        )}
+
         <section className="flex flex-col gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-slate-600">
-            Processing stays in the browser. No CSV content leaves the page.
+          <div className="space-y-1 text-sm text-slate-600">
+            <div>CSV parsing and data processing stay in the browser.</div>
+            <div>
+              {isParsing
+                ? 'Parsing uploaded files...'
+                : readyToProcess
+                  ? 'Required mappings are complete. The stitcher is ready.'
+                  : 'Complete the required mappings to enable processing.'}
+            </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               type="button"
-              disabled={isProcessing || !liveFile || !changeFile}
+              disabled={isProcessing || !readyToProcess}
               onClick={handleProcess}
             >
               {isProcessing ? 'Processing...' : 'Process Data'}
@@ -476,7 +765,7 @@ export default function App() {
           <div className="border-b border-slate-200 px-6 py-4">
             <h2 className="text-lg font-semibold text-slate-950">Merged Preview</h2>
             <p className="mt-1 text-sm text-slate-600">
-              First 50 rows of the generated historical roster.
+              First 50 rows of the generated historical roster after standardization and stitching.
             </p>
           </div>
 
@@ -508,7 +797,8 @@ export default function App() {
                 ) : (
                   <tr>
                     <td colSpan={OUTPUT_COLUMNS.length} className="px-4 py-16 text-center text-slate-500">
-                      Upload both CSV files and run processing to populate the historical roster.
+                      Upload both CSVs, map the required columns, and run processing to populate the
+                      historical roster.
                     </td>
                   </tr>
                 )}
@@ -518,20 +808,11 @@ export default function App() {
         </section>
 
         <section className="rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-sm text-slate-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-white">Current prototype assumptions</h2>
+          <h2 className="text-lg font-semibold text-white">Mapping behavior in this version</h2>
           <ul className="mt-3 space-y-2 leading-6 text-slate-300">
-            <li>
-              Same-day change rows are collapsed to one effective state using the final row order in
-              the uploaded Change Log.
-            </li>
-            <li>
-              If the first logged change happens after Hire Date, the prototype backfills the gap
-              using the earliest known team/manager for that rep.
-            </li>
-            <li>
-              The final open era is aligned to the Live Roster&apos;s current team/manager before the
-              Termination Date check is applied.
-            </li>
+            <li>Headers are parsed immediately after upload and auto-mapped when a common alias is recognized.</li>
+            <li>Only required standard fields block processing. Optional fields can be left unmapped.</li>
+            <li>The stitcher receives transformed rows keyed to the standard schema, so downstream logic no longer depends on raw header names.</li>
           </ul>
         </section>
       </div>
