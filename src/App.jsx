@@ -76,42 +76,56 @@ const EMPTY_UPLOAD = {
 const EXAMPLE_RECORD = {
   liveRoster: {
     SFDC_ID: '0058A00000EXAMPLE',
+    Full_Name: 'Avery Morgan',
     Hire_Date: '2022-01-10',
     Termination_Date: '',
     Team: 'Mid-Market',
     Manager: 'Taylor Chen',
+    Segment: 'MM NBS',
+    Function_Origin: 'Direct AM',
   },
   changeLog: [
     {
       Change_Date: '2022-01-10',
       Team: 'SMB',
       Manager: 'Jamie Lee',
+      Segment: 'SMB NA',
+      Function_Origin: 'SDR',
       note: 'Opening state at hire',
     },
     {
       Change_Date: '2023-06-01',
       Team: 'Enterprise',
       Manager: 'Jamie Lee',
-      note: 'Team move',
+      Segment: 'Enterprise',
+      Function_Origin: 'Direct AM',
+      note: 'Team and function move',
     },
     {
       Change_Date: '2024-02-15',
       Team: '',
       Manager: 'Taylor Chen',
+      Segment: '',
+      Function_Origin: '',
       note: 'Manager change',
     },
     {
       Change_Date: '2024-02-15',
       Team: 'Mid-Market',
       Manager: '',
+      Segment: 'MM NBS',
+      Function_Origin: '',
       note: 'Same-day team change',
     },
   ],
   output: [
     {
       'Salesforce ID': '0058A00000EXAMPLE',
+      'Full Name': 'Avery Morgan',
       Team: 'SMB',
       Manager: 'Jamie Lee',
+      Segment: 'SMB NA',
+      'Function Origin': 'SDR',
       'Start Date': '2022-01-10',
       'End Date': '2023-05-31',
       Is_Active: 'false',
@@ -119,17 +133,23 @@ const EXAMPLE_RECORD = {
     },
     {
       'Salesforce ID': '0058A00000EXAMPLE',
+      'Full Name': 'Avery Morgan',
       Team: 'Enterprise',
       Manager: 'Jamie Lee',
+      Segment: 'Enterprise',
+      'Function Origin': 'Direct AM',
       'Start Date': '2023-06-01',
       'End Date': '2024-02-14',
       Is_Active: 'false',
-      why: 'Opened by the 2023-06-01 change and closed by the next effective date.',
+      why: 'The history file shows both a team move and a function change, which the live roster alone cannot show.',
     },
     {
       'Salesforce ID': '0058A00000EXAMPLE',
+      'Full Name': 'Avery Morgan',
       Team: 'Mid-Market',
       Manager: 'Taylor Chen',
+      Segment: 'MM NBS',
+      'Function Origin': 'Direct AM',
       'Start Date': '2024-02-15',
       'End Date': '',
       Is_Active: 'true',
@@ -705,6 +725,113 @@ function ExampleTable({ columns, rows, tone = 'default' }) {
   );
 }
 
+function ExampleStoryModal({ open, onClose }) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(38,47,48,0.55)] px-4 py-8">
+      <div className="w-full max-w-6xl rounded-2xl border border-[color:var(--line)] bg-white shadow-[0_24px_80px_rgba(38,47,48,0.28)]">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[color:var(--line)] bg-white px-5 py-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--brand)]">
+              Example Walkthrough
+            </div>
+            <h3 className="mt-1 text-xl font-semibold text-[color:var(--ink)]">
+              How the stitched roster shows the true story of one rep
+            </h3>
+          </div>
+          <button
+            className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+            type="button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-6 px-5 py-5">
+          <Notice>
+            <strong>What the live roster says right now:</strong> Avery Morgan is currently in
+            Mid-Market, reporting to Taylor Chen, working as Direct AM. That is useful, but it is
+            only the current snapshot.
+          </Notice>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">Snapshot from the live roster</div>
+                <SourceTag>Comes from roster</SourceTag>
+              </div>
+              <ExampleTable
+                columns={[
+                  'SFDC_ID',
+                  'Full_Name',
+                  'Hire_Date',
+                  'Termination_Date',
+                  'Team',
+                  'Manager',
+                  'Segment',
+                  'Function_Origin',
+                ]}
+                rows={[EXAMPLE_RECORD.liveRoster]}
+              />
+              <div className="text-sm leading-6 text-[color:var(--muted)]">
+                If you only had the live roster, you would assume this rep had always been in
+                Mid-Market under Taylor Chen as a Direct AM. That is not the full story.
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">Rows from the historical change file</div>
+                <SourceTag tone="history">Comes from change log</SourceTag>
+              </div>
+              <ExampleTable
+                columns={['Change_Date', 'Team', 'Manager', 'Segment', 'Function_Origin', 'note']}
+                rows={EXAMPLE_RECORD.changeLog}
+              />
+              <div className="text-sm leading-6 text-[color:var(--muted)]">
+                These rows reveal the actual path: the rep started in SMB as an SDR, moved into
+                Enterprise and into a Direct AM function, then later changed manager and team on the
+                same day.
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Notice>
+              <strong>Manager change:</strong> the history file shows Taylor Chen taking over on
+              2024-02-15.
+            </Notice>
+            <Notice>
+              <strong>Function change:</strong> the rep changed from `SDR` to `Direct AM` on
+              2023-06-01.
+            </Notice>
+            <Notice>
+              <strong>Same-day cleanup:</strong> the 2024-02-15 manager and team updates collapse
+              into one final row instead of creating overlapping eras.
+            </Notice>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Stitched export rows</div>
+              <SourceTag tone="output">Final stitched truth</SourceTag>
+            </div>
+            <ExampleTable columns={[...PREVIEW_COLUMNS, 'why']} rows={EXAMPLE_RECORD.output} tone="output" />
+            <div className="text-sm leading-6 text-[color:var(--muted)]">
+              This is what you actually want in the export: one row per era, with a clean start and
+              end date for each team-manager-function combination.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [liveUpload, setLiveUpload] = useState(EMPTY_UPLOAD);
   const [changeUpload, setChangeUpload] = useState(EMPTY_UPLOAD);
@@ -716,6 +843,7 @@ export default function App() {
   const [processedRows, setProcessedRows] = useState([]);
   const [stats, setStats] = useState({ reps: 0, changeRows: 0 });
   const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
+  const [isExampleOpen, setIsExampleOpen] = useState(false);
 
   const liveMissingMappings = useMemo(
     () => getMissingRequiredMappings(mappings.live, LIVE_SCHEMA),
@@ -1063,66 +1191,38 @@ export default function App() {
 
         <Section
           title="Example Output"
-          description="This uses the universal core fields for stitching, then appends the rest of the source columns to the export with clear prefixes."
+          description="Open a walkthrough that compares the snapshot view from the live roster against the fuller story revealed by the historical change file."
+          right={
+            <button
+              className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)]"
+              type="button"
+              onClick={() => setIsExampleOpen(true)}
+            >
+              Open Example Popout
+            </button>
+          }
         >
-          <div className="space-y-5">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">Live roster row</div>
-                  <SourceTag>Comes from roster</SourceTag>
-                </div>
-                <ExampleTable
-                  columns={['SFDC_ID', 'Hire_Date', 'Termination_Date', 'Team', 'Manager']}
-                  rows={[EXAMPLE_RECORD.liveRoster]}
-                />
-                <div className="text-sm leading-6 text-[color:var(--muted)]">
-                  The live roster gives the universal anchor fields: rep ID, hire date, optional
-                  termination date, current team, current manager, plus any extra roster columns
-                  that should ride along in the export.
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">Historical change rows</div>
-                  <SourceTag tone="history">Comes from change log</SourceTag>
-                </div>
-                <ExampleTable
-                  columns={['Change_Date', 'Team', 'Manager', 'note']}
-                  rows={EXAMPLE_RECORD.changeLog}
-                />
-                <div className="text-sm leading-6 text-[color:var(--muted)]">
-                  The change log gives the universal history fields: rep ID, effective start date,
-                  team, and manager. Any extra history columns are preserved on the row they open.
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">What gets exported</div>
-                <SourceTag tone="output">Final stitched rows</SourceTag>
-              </div>
-              <ExampleTable columns={[...PREVIEW_COLUMNS, 'why']} rows={EXAMPLE_RECORD.output} tone="output" />
-            </div>
-
+          <div className="space-y-4">
+            <Notice>
+              <strong>Why this matters:</strong> the live roster only shows the rep&apos;s current
+              state. The popout example shows how the change file reveals earlier manager, team, and
+              function history that would otherwise be invisible.
+            </Notice>
             <div className="grid gap-3 lg:grid-cols-3">
               <Notice>
-                <strong>Universal core:</strong> `SFDC_ID`, start date, team, and manager are the
-                minimal fields that make this type of stitcher work across teams.
+                <strong>Before stitching:</strong> one current-state row from the live roster.
               </Notice>
               <Notice>
-                <strong>Still exported:</strong> everything else from the live roster or history
-                files can be appended as `Live - ...` or `History - ...` columns.
+                <strong>History applied:</strong> multiple effective-date rows from the change file.
               </Notice>
               <Notice>
-                <strong>Preview vs export:</strong> the preview stays focused on the universal
-                stitched columns, while the CSV download includes the additional source fields.
+                <strong>After stitching:</strong> clean time-bound eras for the rep&apos;s real story.
               </Notice>
             </div>
           </div>
         </Section>
+
+        <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
       </div>
     </main>
   );
