@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react';
 import Papa from 'papaparse';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const MAPPING_STORAGE_KEYS = {
+  live: 'roster-stitch.live-mapping.v1',
+  change: 'roster-stitch.history-mapping.v1',
+};
 const PREVIEW_COLUMNS = [
   'Salesforce ID',
   'Full Name',
@@ -422,6 +426,63 @@ function suggestMappings(headers, schema) {
   }, {});
 }
 
+function readStoredMapping(kind) {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(MAPPING_STORAGE_KEYS[kind]);
+    if (!rawValue) {
+      return {};
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    return parsedValue && typeof parsedValue === 'object' ? parsedValue : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredMapping(kind, mapping) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(MAPPING_STORAGE_KEYS[kind], JSON.stringify(mapping));
+  } catch {
+    // Ignore storage failures so the workflow still works in restricted browsers.
+  }
+}
+
+function applyStoredMappingDefaults(headers, suggestedMapping, schema, storedMapping) {
+  const availableHeaders = new Set(headers);
+  const usedHeaders = new Set();
+
+  const nextMapping = schema.reduce((current, field) => {
+    const storedHeader = storedMapping[field.key];
+
+    if (storedHeader && availableHeaders.has(storedHeader) && !usedHeaders.has(storedHeader)) {
+      current[field.key] = storedHeader;
+      usedHeaders.add(storedHeader);
+      return current;
+    }
+
+    const suggestedHeader = suggestedMapping[field.key];
+    if (suggestedHeader && availableHeaders.has(suggestedHeader) && !usedHeaders.has(suggestedHeader)) {
+      current[field.key] = suggestedHeader;
+      usedHeaders.add(suggestedHeader);
+      return current;
+    }
+
+    current[field.key] = '';
+    return current;
+  }, {});
+
+  return nextMapping;
+}
+
 function getMissingRequiredMappings(mapping, schema) {
   return schema.filter((field) => field.required && !mapping[field.key]);
 }
@@ -577,13 +638,18 @@ function getInternalValueForLiveField(row, fieldKey) {
   return fieldMap[fieldKey] ?? '';
 }
 
-function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
+function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) {
   const matchedHeaders = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
-  const orderedHeaders = [
+  const reviewColumns = [
     ...matchedHeaders,
     'Current_Record',
     ...liveHeaders.filter((header) => !matchedHeaders.includes(header)),
   ];
+  const liveHeaderKeys = new Set(liveHeaders.map((header) => normalizeHeader(header)));
+  const historyOnlyColumns = historyHeaders.filter(
+    (header) => !liveHeaderKeys.has(normalizeHeader(header)),
+  );
+  const orderedHeaders = [...reviewColumns, ...historyOnlyColumns];
   const headerToField = new Map(
     Object.entries(liveMapping)
       .filter(([, header]) => header)
@@ -592,6 +658,8 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
 
   return {
     columns: orderedHeaders,
+    reviewColumns,
+    historyOnlyColumns,
     rows: rows.map((row) =>
       orderedHeaders.reduce((current, header) => {
         if (header === 'Current_Record') {
@@ -603,6 +671,8 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
 
         if (fieldKey) {
           current[header] = getInternalValueForLiveField(row, fieldKey);
+        } else if (historyOnlyColumns.includes(header)) {
+          current[header] = row[`History - ${header}`] ?? '';
         } else {
           current[header] = row[`Live - ${header}`] ?? '';
         }
@@ -999,14 +1069,18 @@ function groupDataQualityIssues(issues) {
   return [...groups.values()].sort((left, right) => right.items.length - left.items.length);
 }
 
-function groupExportColumns(columns, liveMapping) {
+function groupExportColumns(columns, liveMapping, historyOnlyColumns) {
   const matchedColumns = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
 
   return {
     matched: matchedColumns,
     derived: columns.filter((column) => column === 'Current_Record'),
+    historyOnly: historyOnlyColumns,
     remaining: columns.filter(
-      (column) => !matchedColumns.includes(column) && column !== 'Current_Record',
+      (column) =>
+        !matchedColumns.includes(column) &&
+        column !== 'Current_Record' &&
+        !historyOnlyColumns.includes(column),
     ),
   };
 }
@@ -1341,6 +1415,7 @@ function ExportConfigurationModal({
   exportColumns,
   selectedExportColumns,
   liveMapping,
+  historyOnlyColumns,
   onToggleColumn,
   onSelectAll,
   onResetDefault,
@@ -1350,7 +1425,7 @@ function ExportConfigurationModal({
     return null;
   }
 
-  const groupedColumns = groupExportColumns(exportColumns, liveMapping);
+  const groupedColumns = groupExportColumns(exportColumns, liveMapping, historyOnlyColumns);
 
   function renderGroup(title, description, columns) {
     if (!columns.length) {
@@ -1470,6 +1545,11 @@ function ExportConfigurationModal({
             'Remaining live-roster columns',
             'These stay in the same order they appeared in the uploaded live roster.',
             groupedColumns.remaining,
+          )}
+          {renderGroup(
+            'Optional history-roster columns',
+            'These only exist in the history roster. They are available for export, but start unselected.',
+            groupedColumns.historyOnly,
           )}
         </div>
       </div>
@@ -1753,6 +1833,7 @@ function HistoricalRosterApp() {
   const [issues, setIssues] = useState([]);
   const [processedRows, setProcessedRows] = useState([]);
   const [reviewRows, setReviewRows] = useState([]);
+  const [reviewColumns, setReviewColumns] = useState([]);
   const [stats, setStats] = useState({
     reps: 0,
     changeRows: 0,
@@ -1763,6 +1844,7 @@ function HistoricalRosterApp() {
     },
   });
   const [exportColumns, setExportColumns] = useState([]);
+  const [historyOnlyExportColumns, setHistoryOnlyExportColumns] = useState([]);
   const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
   const [isExportConfigOpen, setIsExportConfigOpen] = useState(false);
@@ -1810,10 +1892,10 @@ function HistoricalRosterApp() {
   }, [filteredFinalRows, finalViewSort]);
   const reviewTableColumns = useMemo(() => {
     if (!processedRows.some((row) => cleanValue(row['History - role_name']))) {
-      return exportColumns;
+      return reviewColumns;
     }
 
-    const columns = [...exportColumns];
+    const columns = [...reviewColumns];
     const currentRecordIndex = columns.indexOf('Current_Record');
 
     if (currentRecordIndex >= 0 && !columns.includes('role_name')) {
@@ -1826,7 +1908,7 @@ function HistoricalRosterApp() {
     }
 
     return columns;
-  }, [exportColumns, processedRows]);
+  }, [processedRows, reviewColumns]);
   const cleanupRecommendations = useMemo(
     () => buildCleanupRecommendations(issues, processedRows, stats),
     [issues, processedRows, stats],
@@ -1859,6 +1941,7 @@ function HistoricalRosterApp() {
     setIssues([]);
     setProcessedRows([]);
     setReviewRows([]);
+    setReviewColumns([]);
     setIssueSelections({});
     setSelectedExportColumns([]);
     setStats({
@@ -1871,6 +1954,7 @@ function HistoricalRosterApp() {
       },
     });
     setExportColumns([]);
+    setHistoryOnlyExportColumns([]);
 
     if (!file) {
       if (kind === 'live') {
@@ -1895,9 +1979,16 @@ function HistoricalRosterApp() {
         headers: parsedFile.headers,
         rows: parsedFile.rows,
       };
-      const nextMapping = suggestMappings(
+      const schema = kind === 'live' ? LIVE_SCHEMA : CHANGE_SCHEMA;
+      const suggestedMapping = suggestMappings(
         parsedFile.headers,
-        kind === 'live' ? LIVE_SCHEMA : CHANGE_SCHEMA,
+        schema,
+      );
+      const nextMapping = applyStoredMappingDefaults(
+        parsedFile.headers,
+        suggestedMapping,
+        schema,
+        readStoredMapping(kind),
       );
 
       if (kind === 'live') {
@@ -1930,6 +2021,7 @@ function HistoricalRosterApp() {
   function handleMappingChange(kind, fieldKey, value) {
     setProcessedRows([]);
     setReviewRows([]);
+    setReviewColumns([]);
     setIssues([]);
     setIssueSelections({});
     setSelectedExportColumns([]);
@@ -1943,14 +2035,21 @@ function HistoricalRosterApp() {
       },
     });
     setExportColumns([]);
+    setHistoryOnlyExportColumns([]);
 
-    setMappings((current) => ({
-      ...current,
-      [kind]: {
+    setMappings((current) => {
+      const nextKindMapping = {
         ...current[kind],
         [fieldKey]: value,
-      },
-    }));
+      };
+      const nextMappings = {
+        ...current,
+        [kind]: nextKindMapping,
+      };
+
+      writeStoredMapping(kind, nextKindMapping);
+      return nextMappings;
+    });
   }
 
   async function handleProcess() {
@@ -1963,6 +2062,7 @@ function HistoricalRosterApp() {
     setIssues([]);
     setIssueSelections({});
     setSelectedExportColumns([]);
+    setReviewColumns([]);
     setIsProcessing(true);
 
     try {
@@ -1978,9 +2078,15 @@ function HistoricalRosterApp() {
       );
 
       const output = buildHistoricalRoster(standardizedLiveRows, standardizedChangeRows);
-      const liveOrderedOutput = buildLiveOrderedOutput(output.rows, liveUpload.headers, mappings.live);
+      const liveOrderedOutput = buildLiveOrderedOutput(
+        output.rows,
+        liveUpload.headers,
+        mappings.live,
+        changeUpload.headers,
+      );
       setProcessedRows(output.rows);
       setReviewRows(liveOrderedOutput.rows);
+      setReviewColumns(liveOrderedOutput.reviewColumns);
       setIssues(output.issues);
       setStats({
         ...output.stats,
@@ -1988,10 +2094,12 @@ function HistoricalRosterApp() {
         collapseSummary: output.collapseSummary,
       });
       setExportColumns(liveOrderedOutput.columns);
-      setSelectedExportColumns(liveOrderedOutput.columns);
+      setHistoryOnlyExportColumns(liveOrderedOutput.historyOnlyColumns);
+      setSelectedExportColumns(liveOrderedOutput.reviewColumns);
     } catch (processingError) {
       setProcessedRows([]);
       setReviewRows([]);
+      setReviewColumns([]);
       setIssueSelections({});
       setSelectedExportColumns([]);
       setStats({
@@ -2004,6 +2112,7 @@ function HistoricalRosterApp() {
         },
       });
       setExportColumns([]);
+      setHistoryOnlyExportColumns([]);
       setError(processingError.message || 'The uploaded data could not be transformed.');
     } finally {
       setIsProcessing(false);
@@ -2035,7 +2144,7 @@ function HistoricalRosterApp() {
   }
 
   function handleResetDefaultExportColumns() {
-    setSelectedExportColumns(exportColumns);
+    setSelectedExportColumns(reviewColumns);
   }
 
   return (
@@ -2056,7 +2165,8 @@ function HistoricalRosterApp() {
               </p>
               <div className="mt-3 rounded-xl border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)] px-4 py-3 text-sm text-[color:var(--ink)]">
                 <strong>How this works:</strong> the <strong>Live Roster</strong> is your main
-                list. We only build timelines for people who are in the live roster. If someone
+                list. Every valid live-roster row stays in scope, even if there is no matching
+                history. We only build timelines for people who are in the live roster. If someone
                 only appears in the history file, they will not be included.
               </div>
             </div>
@@ -2543,6 +2653,7 @@ function HistoricalRosterApp() {
           exportColumns={exportColumns}
           selectedExportColumns={selectedExportColumns}
           liveMapping={mappings.live}
+          historyOnlyColumns={historyOnlyExportColumns}
           onToggleColumn={handleToggleExportColumn}
           onSelectAll={() => setSelectedExportColumns(exportColumns)}
           onResetDefault={handleResetDefaultExportColumns}
