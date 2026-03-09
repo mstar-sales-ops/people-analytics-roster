@@ -608,7 +608,7 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
         }
 
         return current;
-      }, {}),
+      }, { role_name: row['History - role_name'] ?? '' }),
     ),
     searchHeaders: {
       salesforceId: liveMapping.SFDC_ID ?? '',
@@ -1808,6 +1808,25 @@ function HistoricalRosterApp() {
 
     return rows;
   }, [filteredFinalRows, finalViewSort]);
+  const reviewTableColumns = useMemo(() => {
+    if (!processedRows.some((row) => cleanValue(row['History - role_name']))) {
+      return exportColumns;
+    }
+
+    const columns = [...exportColumns];
+    const currentRecordIndex = columns.indexOf('Current_Record');
+
+    if (currentRecordIndex >= 0 && !columns.includes('role_name')) {
+      columns.splice(currentRecordIndex + 1, 0, 'role_name');
+      return columns;
+    }
+
+    if (!columns.includes('role_name')) {
+      columns.push('role_name');
+    }
+
+    return columns;
+  }, [exportColumns, processedRows]);
   const cleanupRecommendations = useMemo(
     () => buildCleanupRecommendations(issues, processedRows, stats),
     [issues, processedRows, stats],
@@ -2414,7 +2433,7 @@ function HistoricalRosterApp() {
                   <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
                     <thead className="sticky top-0 bg-[color:var(--surface-soft)]">
                       <tr>
-                        {exportColumns.map((column) => {
+                        {reviewTableColumns.map((column) => {
                           const active = finalViewSort.column === column;
                           const directionIndicator = active
                             ? finalViewSort.direction === 'asc'
@@ -2446,7 +2465,7 @@ function HistoricalRosterApp() {
                       {sortedFinalRows.length > 0 ? (
                         sortedFinalRows.map((row, index) => (
                           <tr key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}>
-                            {exportColumns.map((column) => (
+                            {reviewTableColumns.map((column) => (
                               <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
                                 {String(row[column] ?? '') || '—'}
                               </td>
@@ -2456,7 +2475,7 @@ function HistoricalRosterApp() {
                       ) : (
                         <tr>
                           <td
-                            colSpan={exportColumns.length}
+                            colSpan={reviewTableColumns.length}
                             className="px-4 py-16 text-center text-sm text-[color:var(--muted)]"
                           >
                             No people matched that search. Try a full name or Salesforce ID.
