@@ -5,13 +5,24 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_COLUMNS = [
   'Salesforce ID',
   'Full Name',
-  'Team',
-  'Manager',
-  'Segment',
+  'LOB',
   'Function Origin',
+  'Manager',
   'Start Date',
   'End Date',
+  'Team',
+  'Segment',
   'Is_Active',
+];
+
+const PRIMARY_OUTPUT_ORDER = [
+  'Salesforce ID',
+  'Full Name',
+  'LOB',
+  'Function Origin',
+  'Manager',
+  'Start Date',
+  'End Date',
 ];
 
 const LIVE_SCHEMA = [
@@ -529,6 +540,25 @@ function collapseAdjacentMatchingRows(rows) {
   };
 }
 
+function orderOutputColumns(columns) {
+  const priority = new Map(PRIMARY_OUTPUT_ORDER.map((column, index) => [column, index]));
+
+  return [...columns].sort((left, right) => {
+    const leftPriority = priority.has(left) ? priority.get(left) : Number.POSITIVE_INFINITY;
+    const rightPriority = priority.has(right) ? priority.get(right) : Number.POSITIVE_INFINITY;
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    if (leftPriority !== Number.POSITIVE_INFINITY) {
+      return 0;
+    }
+
+    return left.localeCompare(right);
+  });
+}
+
 function buildHistoricalRoster(liveRows, changeRows) {
   const issues = [];
   const liveById = new Map();
@@ -611,6 +641,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
     const row = {
       'Salesforce ID': rep.salesforceId,
       'Full Name': activeState.fullName || rep.fullName || '',
+      LOB: rep.passthrough['Live - LOB'] || activeState.passthrough?.['History - LOB'] || '',
       Team: activeState.team,
       Manager: activeState.manager,
       Segment: activeState.segment || rep.segment || '',
@@ -719,7 +750,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
       reps: liveById.size,
       changeRows: changeRows.length,
     },
-    exportColumns,
+    exportColumns: orderOutputColumns(exportColumns),
   };
 }
 
@@ -932,7 +963,7 @@ function Section({ title, description, right, children }) {
   );
 }
 
-function StatTile({ label, value, tone = 'default' }) {
+function StatTile({ label, value, tone = 'default', tooltip }) {
   const toneClass =
     tone === 'success'
       ? 'border-[color:var(--success-line)] bg-[color:var(--success-bg)]'
@@ -941,7 +972,7 @@ function StatTile({ label, value, tone = 'default' }) {
         : 'border-[color:var(--line)] bg-white';
 
   return (
-    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
+    <div className={`rounded-xl border px-4 py-3 ${toneClass}`} title={tooltip}>
       <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
         {label}
       </div>
@@ -954,10 +985,10 @@ function UploadCard({ label, helperText, file, rowCount, headerCount, onChange }
   const ready = Boolean(file);
 
   return (
-    <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4">
+    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-5 shadow-[0_8px_24px_rgba(26,34,56,0.04)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-[color:var(--ink)]">{label}</div>
+          <div className="text-lg font-semibold text-[color:var(--ink)]">{label}</div>
           <div className="mt-1 text-sm leading-6 text-[color:var(--muted)]">{helperText}</div>
         </div>
         <div
@@ -1603,6 +1634,13 @@ function HistoricalRosterApp() {
     CHANGE_SCHEMA.filter((field) => field.required).length;
   const mappedRequiredCount =
     totalRequiredMappings - liveMissingMappings.length - changeMissingMappings.length;
+  const requiredMappingTooltip = [
+    'Live Roster required fields:',
+    ...LIVE_SCHEMA.filter((field) => field.required).map((field) => `- ${field.label}`),
+    '',
+    'History Roster required fields:',
+    ...CHANGE_SCHEMA.filter((field) => field.required).map((field) => `- ${field.label}`),
+  ].join('\n');
   const previewMaxRows = 8;
 
   async function handleUpload(kind, file) {
@@ -1816,16 +1854,12 @@ function HistoricalRosterApp() {
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-4">
-          <StatTile
-            label="Files"
-            value={`${Number(Boolean(liveUpload.file)) + Number(Boolean(changeUpload.file))}/2`}
-            tone={readyForMapping ? 'success' : 'default'}
-          />
+        <section className="grid gap-4 md:grid-cols-3">
           <StatTile
             label="Required Mapping"
             value={`${mappedRequiredCount}/${totalRequiredMappings}`}
             tone={readyToProcess ? 'success' : readyForMapping ? 'warning' : 'default'}
+            tooltip={requiredMappingTooltip}
           />
           <StatTile label="Rows Parsed" value={liveUpload.rows.length + changeUpload.rows.length} />
           <StatTile
