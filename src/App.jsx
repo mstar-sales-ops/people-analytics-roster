@@ -1011,6 +1011,131 @@ function groupExportColumns(columns, liveMapping) {
   };
 }
 
+function buildHistoricalRosterAudit(rows) {
+  const sortedRows = [...rows].sort((left, right) => {
+    if (left['Salesforce ID'] !== right['Salesforce ID']) {
+      return String(left['Salesforce ID'] ?? '').localeCompare(String(right['Salesforce ID'] ?? ''));
+    }
+
+    return String(left['Start Date'] ?? '').localeCompare(String(right['Start Date'] ?? ''));
+  });
+  const uniqueEmployees = new Set(
+    sortedRows.map((row) => cleanValue(row['Salesforce ID'])).filter(Boolean),
+  ).size;
+  const currentRows = sortedRows.filter((row) => row.Current_Record === true).length;
+  const terminatedSpells = sortedRows.filter(
+    (row) => row.Current_Record === true && row.Is_Active === false,
+  ).length;
+  const managerlessRows = sortedRows.filter((row) => !cleanValue(row.Manager)).length;
+  const rowsMissingStableKeys = sortedRows.filter(
+    (row) => !cleanValue(row['Salesforce ID']) || !cleanValue(row['Start Date']),
+  ).length;
+
+  let overlapErrors = 0;
+  let gapErrors = 0;
+  let duplicateCurrentRowErrors = 0;
+  let rowsWithNoRealStateChange = 0;
+
+  const currentRowCounts = new Map();
+
+  sortedRows.forEach((row) => {
+    const salesforceId = cleanValue(row['Salesforce ID']);
+    if (!salesforceId || row.Current_Record !== true) {
+      return;
+    }
+
+    currentRowCounts.set(salesforceId, (currentRowCounts.get(salesforceId) ?? 0) + 1);
+  });
+
+  currentRowCounts.forEach((count) => {
+    if (count > 1) {
+      duplicateCurrentRowErrors += count - 1;
+    }
+  });
+
+  for (let index = 1; index < sortedRows.length; index += 1) {
+    const previousRow = sortedRows[index - 1];
+    const currentRow = sortedRows[index];
+
+    if (previousRow['Salesforce ID'] !== currentRow['Salesforce ID']) {
+      continue;
+    }
+
+    if (rowsMatchAcrossAttributes(previousRow, currentRow)) {
+      rowsWithNoRealStateChange += 1;
+    }
+
+    const previousEndDate = parseDateInput(previousRow['End Date']);
+    const currentStartDate = parseDateInput(currentRow['Start Date']);
+
+    if (!previousEndDate || !currentStartDate) {
+      continue;
+    }
+
+    if (currentStartDate <= previousEndDate) {
+      overlapErrors += 1;
+      continue;
+    }
+
+    if (currentStartDate > previousEndDate + DAY_IN_MS) {
+      gapErrors += 1;
+    }
+  }
+
+  return [
+    {
+      label: 'Employees',
+      count: uniqueEmployees,
+      meaning: 'Unique Salesforce IDs in the stitched export.',
+    },
+    {
+      label: 'Assignment rows',
+      count: sortedRows.length,
+      meaning: 'Total historical assignment rows in the stitched export.',
+    },
+    {
+      label: 'Current rows',
+      count: currentRows,
+      meaning: 'Rows marked as the final state of an employment timeline.',
+    },
+    {
+      label: 'Terminated spells',
+      count: terminatedSpells,
+      meaning: 'Final rows that are no longer active but still represent the last known state.',
+    },
+    {
+      label: 'Overlap errors',
+      count: overlapErrors,
+      meaning: 'Cases where one row starts on or before the previous row ends for the same person.',
+    },
+    {
+      label: 'Gap errors',
+      count: gapErrors,
+      meaning: 'Cases where more than one day exists between consecutive rows for the same person.',
+    },
+    {
+      label: 'Duplicate-current-row errors',
+      count: duplicateCurrentRowErrors,
+      meaning: 'Extra rows marked as Current_Record for the same person.',
+    },
+    {
+      label: 'Rows with no real state change',
+      count: rowsWithNoRealStateChange,
+      meaning: 'Adjacent rows where the dates changed but the actual assignment state did not.',
+    },
+    {
+      label: 'Managerless rows',
+      count: managerlessRows,
+      meaning: 'Rows where Manager is blank in the stitched export.',
+    },
+    {
+      label: 'Rows missing stable keys',
+      count: rowsMissingStableKeys,
+      meaning: 'Rows missing Salesforce ID or Start Date.',
+    },
+  ];
+}
+
 function Section({ title, description, right, children }) {
   return (
     <section className="rounded-2xl border border-[color:var(--line)] bg-white">
@@ -1687,6 +1812,7 @@ function HistoricalRosterApp() {
     () => buildCleanupRecommendations(issues, processedRows, stats),
     [issues, processedRows, stats],
   );
+  const auditReport = useMemo(() => buildHistoricalRosterAudit(processedRows), [processedRows]);
   const groupedIssues = useMemo(() => groupDataQualityIssues(issues), [issues]);
 
   const readyForMapping = Boolean(liveUpload.file && changeUpload.file);
@@ -2337,6 +2463,50 @@ function HistoricalRosterApp() {
                           </td>
                         </tr>
                       )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
+                <div className="border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                    Historical roster audit report
+                  </div>
+                  <div className="mt-1 text-sm text-[color:var(--muted)]">
+                    A quick audit of the stitched export so you can spot structural problems before
+                    sharing it.
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
+                    <thead className="bg-white">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Check
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Count
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          What it means
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[color:var(--line)] bg-white">
+                      {auditReport.map((entry) => (
+                        <tr key={entry.label}>
+                          <td className="px-4 py-3 font-medium text-[color:var(--ink)]">
+                            {entry.label}
+                          </td>
+                          <td className="px-4 py-3">
+                            <SourceTag tone={entry.count > 0 ? 'history' : 'output'}>
+                              {entry.count}
+                            </SourceTag>
+                          </td>
+                          <td className="px-4 py-3 text-[color:var(--ink)]">{entry.meaning}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
