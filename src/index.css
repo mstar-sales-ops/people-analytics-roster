@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --surface: #ffffff;
-  --surface-soft: #f7f7f5;
-  --ink: #262f30;
-  --muted: #66717a;
-  --line: #e2e8f0;
-  --brand: #ff4500;
-  --brand-hover: #ff7300;
-  --success-bg: #e9fbf6;
-  --success-line: #bdebdc;
-  --warn-bg: #fff7d6;
-  --warn-line: #eed27c;
-  --danger-bg: #fff0ec;
-  --danger-line: #f0baa9;
+  --surface: #f6f8fb;
+  --surface-soft: #eef3f6;
+  --ink: #1a2238;
+  --muted: #5e6c84;
+  --line: #d8e1ea;
+  --brand: #ff8a3d;
+  --brand-hover: #f57a27;
+  --success-bg: #e7faf5;
+  --success-line: #a7e6d4;
+  --warn-bg: #fff5d7;
+  --warn-line: #f1d17b;
+  --danger-bg: #fff0ea;
+  --danger-line: #f2b9a7;
   color: var(--ink);
   background: var(--surface);
   font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
@@ -37,6 +37,6 @@ body {
 }
 
 ::selection {
-  background: rgba(255, 69, 0, 0.18);
+  background: rgba(255, 138, 61, 0.2);
   color: var(--ink);
 }
