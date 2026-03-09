@@ -312,6 +312,74 @@ function buildPreparedRows(rows, confirmedMappings, autoFixSelections) {
   });
 }
 
+function countWhitespaceCharactersToTrim(value) {
+  const raw = String(value ?? '');
+  const trimmed = raw.trim();
+
+  if (!trimmed && !raw.trim()) {
+    return raw.length;
+  }
+
+  let count = 0;
+  let startIndex = 0;
+  let endIndex = raw.length - 1;
+
+  while (startIndex < raw.length && /\s/.test(raw[startIndex])) {
+    count += 1;
+    startIndex += 1;
+  }
+
+  while (endIndex >= startIndex && /\s/.test(raw[endIndex])) {
+    count += 1;
+    endIndex -= 1;
+  }
+
+  return count;
+}
+
+function buildAutoFixSummary(rows, confirmedMappings) {
+  let whitespaceCharactersToTrim = 0;
+  let capitalizationCandidates = 0;
+  let dateValuesToStandardize = 0;
+
+  const capitalizationFields = ['employee_name', 'manager', 'department', 'title', 'location'];
+
+  ROSTER_FIELDS.forEach((field) => {
+    const mappedHeader = getMappedHeaderForField(confirmedMappings, field.key);
+    if (!mappedHeader) {
+      return;
+    }
+
+    rows.forEach((row) => {
+      const rawValue = row[mappedHeader];
+      const clean = cleanValue(rawValue);
+
+      whitespaceCharactersToTrim += countWhitespaceCharactersToTrim(rawValue);
+
+      if (
+        capitalizationFields.includes(field.key) &&
+        clean &&
+        titleCase(clean) !== clean
+      ) {
+        capitalizationCandidates += 1;
+      }
+
+      if (field.key === 'start_date' && clean) {
+        const parsed = parseDate(clean);
+        if (parsed && formatDate(parsed) !== clean) {
+          dateValuesToStandardize += 1;
+        }
+      }
+    });
+  });
+
+  return {
+    whitespaceCharactersToTrim,
+    capitalizationCandidates,
+    dateValuesToStandardize,
+  };
+}
+
 export function validateRoster(rows, headers, confirmedMappings, autoFixSelections) {
   const blockers = [];
   const warnings = [];
@@ -420,6 +488,7 @@ export function validateRoster(rows, headers, confirmedMappings, autoFixSelectio
     warnings,
     columnFindings,
     preparedRows,
+    autoFixSummary: buildAutoFixSummary(rows, confirmedMappings),
     summary: {
       totalRows: preparedRows.length,
       rowsReady: preparedRows.length - rowBlockers.size,

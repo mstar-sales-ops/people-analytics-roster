@@ -673,6 +673,34 @@ function downloadCsv(rows, columns) {
   URL.revokeObjectURL(url);
 }
 
+function compareCellValues(leftValue, rightValue) {
+  const leftText = String(leftValue ?? '').trim();
+  const rightText = String(rightValue ?? '').trim();
+  const leftDate = parseDateInput(leftText);
+  const rightDate = parseDateInput(rightText);
+
+  if (leftDate && rightDate) {
+    return leftDate - rightDate;
+  }
+
+  if (leftText === 'true' || leftText === 'false' || rightText === 'true' || rightText === 'false') {
+    return Number(leftText === 'true') - Number(rightText === 'true');
+  }
+
+  const leftNumber = Number(leftText);
+  const rightNumber = Number(rightText);
+  if (
+    leftText !== '' &&
+    rightText !== '' &&
+    !Number.isNaN(leftNumber) &&
+    !Number.isNaN(rightNumber)
+  ) {
+    return leftNumber - rightNumber;
+  }
+
+  return leftText.localeCompare(rightText, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function Section({ title, description, right, children }) {
   return (
     <section className="rounded-2xl border border-[color:var(--line)] bg-white">
@@ -1151,6 +1179,11 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
   const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
+  const [finalViewSearch, setFinalViewSearch] = useState('');
+  const [finalViewSort, setFinalViewSort] = useState({
+    column: 'Salesforce ID',
+    direction: 'asc',
+  });
 
   const liveMissingMappings = useMemo(
     () => getMissingRequiredMappings(mappings.live, LIVE_SCHEMA),
@@ -1161,6 +1194,29 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     [mappings.change],
   );
   const previewRows = useMemo(() => processedRows.slice(0, 50), [processedRows]);
+  const filteredFinalRows = useMemo(() => {
+    const query = finalViewSearch.trim().toLowerCase();
+    if (!query) {
+      return processedRows;
+    }
+
+    return processedRows.filter((row) => {
+      const fullName = String(row['Full Name'] ?? '').toLowerCase();
+      const salesforceId = String(row['Salesforce ID'] ?? '').toLowerCase();
+      return fullName.includes(query) || salesforceId.includes(query);
+    });
+  }, [finalViewSearch, processedRows]);
+  const sortedFinalRows = useMemo(() => {
+    const rows = [...filteredFinalRows];
+    const { column, direction } = finalViewSort;
+
+    rows.sort((left, right) => {
+      const comparison = compareCellValues(left[column], right[column]);
+      return direction === 'asc' ? comparison : -comparison;
+    });
+
+    return rows;
+  }, [filteredFinalRows, finalViewSort]);
 
   const readyForMapping = Boolean(liveUpload.file && changeUpload.file);
   const readyToProcess =
@@ -1288,6 +1344,22 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     } finally {
       setIsProcessing(false);
     }
+  }
+
+  function handleFinalViewSort(column) {
+    setFinalViewSort((current) => {
+      if (current.column === column) {
+        return {
+          column,
+          direction: current.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+
+      return {
+        column,
+        direction: 'asc',
+      };
+    });
   }
 
   return (
@@ -1563,6 +1635,111 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
               </div>
             ) : null}
           </div>
+        </Section>
+
+        <Section
+          title="4. Final View"
+          description="Search for a person and sort the full stitched output by any column."
+          right={
+            <div className="flex flex-col gap-2 sm:items-end">
+              <div className="text-sm text-[color:var(--muted)]">
+                {processedRows.length
+                  ? `${sortedFinalRows.length} of ${processedRows.length} rows shown`
+                  : 'Process data to unlock the final view'}
+              </div>
+              {processedRows.length ? (
+                <div className="text-sm text-[color:var(--muted)]">
+                  Search by full name or Salesforce ID
+                </div>
+              ) : null}
+            </div>
+          }
+        >
+          {processedRows.length ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="w-full max-w-xl">
+                  <label className="text-sm font-semibold text-[color:var(--ink)]" htmlFor="final-view-search">
+                    Search people
+                  </label>
+                  <input
+                    id="final-view-search"
+                    className="mt-2 w-full rounded-lg border border-[color:var(--line)] bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--brand)]"
+                    type="text"
+                    placeholder="Type a full name or Salesforce ID"
+                    value={finalViewSearch}
+                    onChange={(event) => setFinalViewSearch(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                  Sorting by <strong className="text-[color:var(--ink)]">{finalViewSort.column}</strong>{' '}
+                  ({finalViewSort.direction})
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
+                <div className="max-h-[38rem] overflow-auto">
+                  <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
+                    <thead className="sticky top-0 bg-[color:var(--surface-soft)]">
+                      <tr>
+                        {exportColumns.map((column) => {
+                          const active = finalViewSort.column === column;
+                          const directionIndicator = active
+                            ? finalViewSort.direction === 'asc'
+                              ? '↑'
+                              : '↓'
+                            : '↕';
+
+                          return (
+                            <th
+                              key={column}
+                              className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]"
+                            >
+                              <button
+                                className={`flex items-center gap-2 whitespace-nowrap ${
+                                  active ? 'text-[color:var(--ink)]' : 'text-[color:var(--muted)]'
+                                }`}
+                                type="button"
+                                onClick={() => handleFinalViewSort(column)}
+                              >
+                                <span>{column}</span>
+                                <span aria-hidden="true">{directionIndicator}</span>
+                              </button>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[color:var(--line)] bg-white">
+                      {sortedFinalRows.length > 0 ? (
+                        sortedFinalRows.map((row, index) => (
+                          <tr key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}>
+                            {exportColumns.map((column) => (
+                              <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
+                                {String(row[column] ?? '') || '—'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={exportColumns.length}
+                            className="px-4 py-16 text-center text-sm text-[color:var(--muted)]"
+                          >
+                            No people matched that search. Try a full name or Salesforce ID.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Notice>Process the files first to review the full stitched history.</Notice>
+          )}
         </Section>
 
         <Section

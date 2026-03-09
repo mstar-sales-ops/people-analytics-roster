@@ -151,22 +151,27 @@ export default function OnboardingWizard({ onComplete }) {
     if (currentStep === 2) {
       return (
         <div className="space-y-5">
-          <FileUploadPanel uploadedFile={uploadedFile} onFileSelected={handleFileSelected} />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+            <div className="min-w-0 flex-1">
+              <FileUploadPanel uploadedFile={uploadedFile} onFileSelected={handleFileSelected} />
+            </div>
+            {uploadedFile ? (
+              <div className="flex justify-end lg:pt-4">
+                <button
+                  className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
+          </div>
           <SummaryTiles
             parseState={parseState}
             suggestions={mappingSuggestions}
             validationResults={validationResults}
           />
-          <div className="flex justify-end">
-            <button
-              className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
-              type="button"
-              disabled={!uploadedFile}
-              onClick={() => setCurrentStep(3)}
-            >
-              Next
-            </button>
-          </div>
           <DataPreviewTable headers={parseState.headers} rows={parseState.previewRows} />
         </div>
       );
@@ -175,49 +180,93 @@ export default function OnboardingWizard({ onComplete }) {
     if (currentStep === 3) {
       return (
         <div className="space-y-5">
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-stretch">
             <label className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm text-[color:var(--ink)]">
-              <input
-                className="mr-3"
-                type="checkbox"
-                checked={autoFixSelections.trimWhitespace}
-                onChange={(event) =>
-                  setAutoFixSelections((current) => ({
-                    ...current,
-                    trimWhitespace: event.target.checked,
-                  }))
-                }
-              />
-              Trim whitespace
+              <div className="flex items-start gap-3">
+                <input
+                  className="mt-1"
+                  type="checkbox"
+                  checked={autoFixSelections.trimWhitespace}
+                  onChange={(event) =>
+                    setAutoFixSelections((current) => ({
+                      ...current,
+                      trimWhitespace: event.target.checked,
+                    }))
+                  }
+                />
+                <div>
+                  <div className="font-medium text-[color:var(--ink)]">Trim whitespace</div>
+                  <div className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                    Remove leading and trailing spaces.{' '}
+                    <strong>{validationResults.autoFixSummary.whitespaceCharactersToTrim}</strong>{' '}
+                    whitespace character
+                    {validationResults.autoFixSummary.whitespaceCharactersToTrim === 1 ? '' : 's'}{' '}
+                    can be trimmed.
+                  </div>
+                </div>
+              </div>
             </label>
             <label className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm text-[color:var(--ink)]">
-              <input
-                className="mr-3"
-                type="checkbox"
-                checked={autoFixSelections.normalizeCapitalization}
-                onChange={(event) =>
-                  setAutoFixSelections((current) => ({
-                    ...current,
-                    normalizeCapitalization: event.target.checked,
-                  }))
-                }
-              />
-              Normalize capitalization
+              <div className="flex items-start gap-3">
+                <input
+                  className="mt-1"
+                  type="checkbox"
+                  checked={autoFixSelections.normalizeCapitalization}
+                  onChange={(event) =>
+                    setAutoFixSelections((current) => ({
+                      ...current,
+                      normalizeCapitalization: event.target.checked,
+                    }))
+                  }
+                />
+                <div>
+                  <div className="font-medium text-[color:var(--ink)]">Normalize capitalization</div>
+                  <div className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                    Convert names, managers, departments, titles, and locations into clean title
+                    case like <strong>Avery Morgan</strong> instead of <strong>AVERY MORGAN</strong>.
+                    {' '}
+                    <strong>{validationResults.autoFixSummary.capitalizationCandidates}</strong>{' '}
+                    value
+                    {validationResults.autoFixSummary.capitalizationCandidates === 1 ? '' : 's'}{' '}
+                    would change.
+                  </div>
+                </div>
+              </div>
             </label>
             <label className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm text-[color:var(--ink)]">
-              <input
-                className="mr-3"
-                type="checkbox"
-                checked={autoFixSelections.standardizeDateFormat}
-                onChange={(event) =>
-                  setAutoFixSelections((current) => ({
-                    ...current,
-                    standardizeDateFormat: event.target.checked,
-                  }))
-                }
-              />
-              Standardize date format
+              <div className="flex items-start gap-3">
+                <input
+                  className="mt-1"
+                  type="checkbox"
+                  checked={autoFixSelections.standardizeDateFormat}
+                  onChange={(event) =>
+                    setAutoFixSelections((current) => ({
+                      ...current,
+                      standardizeDateFormat: event.target.checked,
+                    }))
+                  }
+                />
+                <div>
+                  <div className="font-medium text-[color:var(--ink)]">Standardize date format</div>
+                  <div className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                    Convert recognized dates into <strong>YYYY-MM-DD</strong>.{' '}
+                    <strong>{validationResults.autoFixSummary.dateValuesToStandardize}</strong> date
+                    field
+                    {validationResults.autoFixSummary.dateValuesToStandardize === 1 ? '' : 's'}{' '}
+                    would be standardized.
+                  </div>
+                </div>
+              </div>
             </label>
+            <div className="flex items-stretch justify-end lg:justify-start">
+              <button
+                className="w-full rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] lg:w-auto"
+                type="button"
+                onClick={() => setCurrentStep(4)}
+              >
+                Review import
+              </button>
+            </div>
           </div>
 
           <ColumnMappingTable
@@ -288,7 +337,7 @@ export default function OnboardingWizard({ onComplete }) {
             </button>
           ) : null}
 
-          {currentStep < 4 && currentStep !== 2 ? (
+          {currentStep < 4 && currentStep !== 2 && currentStep !== 3 ? (
             <button
               className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
               type="button"
