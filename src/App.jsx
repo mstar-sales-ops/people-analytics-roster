@@ -469,6 +469,67 @@ function consolidateChangesForRep(changes) {
   return consolidated;
 }
 
+function rowsMatchAcrossAttributes(leftRow, rightRow) {
+  const ignoredColumns = new Set(['Start Date', 'End Date', 'Is_Active']);
+  const keys = new Set([...Object.keys(leftRow), ...Object.keys(rightRow)]);
+
+  for (const key of keys) {
+    if (ignoredColumns.has(key)) {
+      continue;
+    }
+
+    if (String(leftRow[key] ?? '') !== String(rightRow[key] ?? '')) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areDatesContinuous(leftEndDate, rightStartDate) {
+  const leftEnd = parseDateInput(leftEndDate);
+  const rightStart = parseDateInput(rightStartDate);
+
+  if (!leftEnd || !rightStart) {
+    return false;
+  }
+
+  return leftEnd + DAY_IN_MS === rightStart;
+}
+
+function collapseAdjacentMatchingRows(rows) {
+  const collapsedRows = [];
+  let mergedGroups = 0;
+  let rowsRemoved = 0;
+
+  rows.forEach((row) => {
+    const lastRow = collapsedRows[collapsedRows.length - 1];
+
+    if (
+      lastRow &&
+      lastRow['Salesforce ID'] === row['Salesforce ID'] &&
+      rowsMatchAcrossAttributes(lastRow, row) &&
+      areDatesContinuous(lastRow['End Date'], row['Start Date'])
+    ) {
+      lastRow['End Date'] = row['End Date'];
+      lastRow.Is_Active = row.Is_Active;
+      mergedGroups += 1;
+      rowsRemoved += 1;
+      return;
+    }
+
+    collapsedRows.push({ ...row });
+  });
+
+  return {
+    rows: collapsedRows,
+    summary: {
+      mergedGroups,
+      rowsRemoved,
+    },
+  };
+}
+
 function buildHistoricalRoster(liveRows, changeRows) {
   const issues = [];
   const liveById = new Map();
@@ -641,14 +702,19 @@ function buildHistoricalRoster(liveRows, changeRows) {
     results.push(buildOutputRow(rep, activeState, activeStart, finalEndDate));
   });
 
-  return {
-    rows: results.sort((left, right) => {
-      if (left['Salesforce ID'] !== right['Salesforce ID']) {
-        return left['Salesforce ID'].localeCompare(right['Salesforce ID']);
-      }
+  const sortedRows = results.sort((left, right) => {
+    if (left['Salesforce ID'] !== right['Salesforce ID']) {
+      return left['Salesforce ID'].localeCompare(right['Salesforce ID']);
+    }
 
-      return left['Start Date'].localeCompare(right['Start Date']);
-    }),
+    return left['Start Date'].localeCompare(right['Start Date']);
+  });
+  const collapseResult = collapseAdjacentMatchingRows(sortedRows);
+
+  return {
+    rows: collapseResult.rows,
+    uncollapsedRowCount: sortedRows.length,
+    collapseSummary: collapseResult.summary,
     issues,
     stats: {
       reps: liveById.size,
@@ -699,6 +765,74 @@ function compareCellValues(leftValue, rightValue) {
   }
 
   return leftText.localeCompare(rightText, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function buildCleanupRecommendations(issues, processedRows, stats) {
+  const recommendations = [];
+  const missingIdIssueCount = issues.filter(
+    (issue) =>
+      issue.includes('missing SFDC_ID') || issue.includes('missing SFDC_ID or Change_Date'),
+  ).length;
+  const invalidDateIssueCount = issues.filter((issue) => issue.includes('invalid')).length;
+  const duplicateIdIssueCount = issues.filter((issue) => issue.includes('duplicate SFDC_ID')).length;
+  const blankManagerCount = processedRows.filter((row) => !cleanValue(row.Manager)).length;
+  const blankTeamCount = processedRows.filter((row) => !cleanValue(row.Team)).length;
+
+  if (missingIdIssueCount > 0) {
+    recommendations.push({
+      title: 'Fill missing identifiers',
+      impactedCount: missingIdIssueCount,
+      detail: 'Some source rows are missing SFDC_ID or Change_Date, so they cannot be stitched safely.',
+      action: 'Backfill the missing ID/date values in the source roster before the next import.',
+    });
+  }
+
+  if (invalidDateIssueCount > 0) {
+    recommendations.push({
+      title: 'Standardize invalid dates',
+      impactedCount: invalidDateIssueCount,
+      detail: 'Some source rows contain dates the parser could not trust.',
+      action: 'Normalize those dates to YYYY-MM-DD or a consistent slash format before re-importing.',
+    });
+  }
+
+  if (duplicateIdIssueCount > 0) {
+    recommendations.push({
+      title: 'Review duplicate Salesforce IDs',
+      impactedCount: duplicateIdIssueCount,
+      detail: 'Duplicate IDs in the live roster can create conflicting anchor records.',
+      action: 'Confirm whether those are true duplicates or should be separate reps before rerunning.',
+    });
+  }
+
+  if (blankManagerCount > 0 || blankTeamCount > 0) {
+    recommendations.push({
+      title: 'Backfill blank stitched attributes',
+      impactedCount: blankManagerCount + blankTeamCount,
+      detail: 'Some final rows still have blank manager or team values after stitching.',
+      action: 'Review the history roster for incomplete manager/team updates and fill the missing values upstream.',
+    });
+  }
+
+  if (stats.collapseSummary.rowsRemoved > 0) {
+    recommendations.push({
+      title: 'Consolidate redundant change rows upstream',
+      impactedCount: stats.collapseSummary.rowsRemoved,
+      detail: 'Adjacent stitched rows were identical except for date continuity, so they were collapsed automatically.',
+      action: 'Consider deduplicating repeated same-state history rows in the source file to reduce noise.',
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      title: 'No urgent cleanup updates',
+      impactedCount: 0,
+      detail: 'This stitched output does not show a major cleanup pattern right now.',
+      action: 'You can export as-is, then use search and sorting to spot any rep-specific edge cases.',
+    });
+  }
+
+  return recommendations;
 }
 
 function Section({ title, description, right, children }) {
@@ -1175,7 +1309,15 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   const [error, setError] = useState('');
   const [issues, setIssues] = useState([]);
   const [processedRows, setProcessedRows] = useState([]);
-  const [stats, setStats] = useState({ reps: 0, changeRows: 0 });
+  const [stats, setStats] = useState({
+    reps: 0,
+    changeRows: 0,
+    uncollapsedRowCount: 0,
+    collapseSummary: {
+      mergedGroups: 0,
+      rowsRemoved: 0,
+    },
+  });
   const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
   const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
@@ -1217,6 +1359,10 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
 
     return rows;
   }, [filteredFinalRows, finalViewSort]);
+  const cleanupRecommendations = useMemo(
+    () => buildCleanupRecommendations(issues, processedRows, stats),
+    [issues, processedRows, stats],
+  );
 
   const readyForMapping = Boolean(liveUpload.file && changeUpload.file);
   const readyToProcess =
@@ -1236,7 +1382,15 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     setError('');
     setIssues([]);
     setProcessedRows([]);
-    setStats({ reps: 0, changeRows: 0 });
+    setStats({
+      reps: 0,
+      changeRows: 0,
+      uncollapsedRowCount: 0,
+      collapseSummary: {
+        mergedGroups: 0,
+        rowsRemoved: 0,
+      },
+    });
     setExportColumns(PREVIEW_COLUMNS);
 
     if (!file) {
@@ -1297,7 +1451,15 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   function handleMappingChange(kind, fieldKey, value) {
     setProcessedRows([]);
     setIssues([]);
-    setStats({ reps: 0, changeRows: 0 });
+    setStats({
+      reps: 0,
+      changeRows: 0,
+      uncollapsedRowCount: 0,
+      collapseSummary: {
+        mergedGroups: 0,
+        rowsRemoved: 0,
+      },
+    });
     setExportColumns(PREVIEW_COLUMNS);
 
     setMappings((current) => ({
@@ -1334,11 +1496,23 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
       const output = buildHistoricalRoster(standardizedLiveRows, standardizedChangeRows);
       setProcessedRows(output.rows);
       setIssues(output.issues);
-      setStats(output.stats);
+      setStats({
+        ...output.stats,
+        uncollapsedRowCount: output.uncollapsedRowCount,
+        collapseSummary: output.collapseSummary,
+      });
       setExportColumns(output.exportColumns);
     } catch (processingError) {
       setProcessedRows([]);
-      setStats({ reps: 0, changeRows: 0 });
+      setStats({
+        reps: 0,
+        changeRows: 0,
+        uncollapsedRowCount: 0,
+        collapseSummary: {
+          mergedGroups: 0,
+          rowsRemoved: 0,
+        },
+      });
       setExportColumns(PREVIEW_COLUMNS);
       setError(processingError.message || 'The uploaded data could not be transformed.');
     } finally {
@@ -1567,6 +1741,23 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
           <div className="space-y-4">
             {error ? <Notice tone="error">{error}</Notice> : null}
 
+            {processedRows.length ? (
+              <div className="grid gap-3 lg:grid-cols-3">
+                <Notice>
+                  <strong>Rule:</strong> collapse adjacent identical eras when every attribute
+                  matches and the end date rolls directly into the next start date.
+                </Notice>
+                <Notice tone={stats.collapseSummary.rowsRemoved ? 'warning' : 'default'}>
+                  <strong>Matches found:</strong> {stats.collapseSummary.mergedGroups} adjacent
+                  match{stats.collapseSummary.mergedGroups === 1 ? '' : 'es'}.
+                </Notice>
+                <Notice tone={stats.collapseSummary.rowsRemoved ? 'warning' : 'default'}>
+                  <strong>Decision:</strong> removed {stats.collapseSummary.rowsRemoved} duplicate
+                  row{stats.collapseSummary.rowsRemoved === 1 ? '' : 's'} and kept date continuity.
+                </Notice>
+              </div>
+            ) : null}
+
             {issues.length > 0 ? (
               <Notice tone="warning">
                 {issues.length} data quality note{issues.length === 1 ? '' : 's'} found. Review the
@@ -1578,8 +1769,13 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
               <div className="flex items-center justify-between border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
                 <div className="text-sm font-semibold text-[color:var(--ink)]">Preview rows</div>
                 <div className="text-sm text-[color:var(--muted)]">
-                  Shows up to 50 rows in a fixed-height table. About {previewMaxRows} rows are
-                  visible before scrolling.
+                  Showing {processedRows.length} final row{processedRows.length === 1 ? '' : 's'}
+                  {stats.uncollapsedRowCount
+                    ? ` after collapsing ${stats.uncollapsedRowCount - processedRows.length} redundant row${
+                        stats.uncollapsedRowCount - processedRows.length === 1 ? '' : 's'
+                      }.`
+                    : '.'}{' '}
+                  About {previewMaxRows} rows are visible before scrolling.
                 </div>
               </div>
               <div className="max-h-[30rem] overflow-auto">
@@ -1657,6 +1853,32 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         >
           {processedRows.length ? (
             <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                {cleanupRecommendations.map((recommendation) => (
+                  <div
+                    key={recommendation.title}
+                    className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-[color:var(--ink)]">
+                        {recommendation.title}
+                      </div>
+                      <SourceTag tone={recommendation.impactedCount > 0 ? 'history' : 'output'}>
+                        {recommendation.impactedCount > 0
+                          ? `${recommendation.impactedCount} impacted`
+                          : 'No action needed'}
+                      </SourceTag>
+                    </div>
+                    <div className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                      {recommendation.detail}
+                    </div>
+                    <div className="mt-3 text-sm text-[color:var(--ink)]">
+                      <strong>Recommended update:</strong> {recommendation.action}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="w-full max-w-xl">
                   <label className="text-sm font-semibold text-[color:var(--ink)]" htmlFor="final-view-search">
