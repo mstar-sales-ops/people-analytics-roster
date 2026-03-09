@@ -872,6 +872,85 @@ function StoryCard({ step, title, children }) {
   );
 }
 
+function MappingModal({
+  open,
+  onClose,
+  isParsing,
+  liveMissingMappings,
+  changeMissingMappings,
+  liveUpload,
+  changeUpload,
+  mappings,
+  onChange,
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(38,47,48,0.55)] px-4 py-8">
+      <div className="w-full max-w-6xl rounded-2xl border border-[color:var(--line)] bg-white shadow-[0_24px_80px_rgba(38,47,48,0.28)]">
+        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[color:var(--line)] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--brand)]">
+              Column Mapping
+            </div>
+            <h3 className="mt-1 text-xl font-semibold text-[color:var(--ink)]">
+              Review and edit the mapped fields
+            </h3>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              This popout keeps the main page short. Adjust the roster and history mappings here.
+            </p>
+          </div>
+          <button
+            className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+            type="button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Notice tone={liveMissingMappings.length ? 'warning' : 'default'}>
+              Live roster missing required fields:{' '}
+              {liveMissingMappings.length
+                ? liveMissingMappings.map((field) => field.label).join(', ')
+                : 'none'}
+            </Notice>
+            <Notice tone={changeMissingMappings.length ? 'warning' : 'default'}>
+              History roster missing required fields:{' '}
+              {changeMissingMappings.length
+                ? changeMissingMappings.map((field) => field.label).join(', ')
+                : 'none'}
+            </Notice>
+          </div>
+
+          {isParsing ? <Notice>Parsing files...</Notice> : null}
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <MappingPanel
+              title="Live Roster Schema"
+              schema={LIVE_SCHEMA}
+              headers={liveUpload.headers}
+              mapping={mappings.live}
+              onChange={(fieldKey, value) => onChange('live', fieldKey, value)}
+            />
+            <MappingPanel
+              title="History Roster Schema"
+              schema={CHANGE_SCHEMA}
+              headers={changeUpload.headers}
+              mapping={mappings.change}
+              onChange={(fieldKey, value) => onChange('change', fieldKey, value)}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ExampleStoryModal({ open, onClose }) {
   const [exampleIndex, setExampleIndex] = useState(0);
 
@@ -1070,6 +1149,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   const [processedRows, setProcessedRows] = useState([]);
   const [stats, setStats] = useState({ reps: 0, changeRows: 0 });
   const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
+  const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
 
   const liveMissingMappings = useMemo(
@@ -1094,6 +1174,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     CHANGE_SCHEMA.filter((field) => field.required).length;
   const mappedRequiredCount =
     totalRequiredMappings - liveMissingMappings.length - changeMissingMappings.length;
+  const previewMaxRows = 8;
 
   async function handleUpload(kind, file) {
     setError('');
@@ -1300,9 +1381,17 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
           title="2. Map Columns"
           description="Required fields must be mapped before processing can run."
           right={
-            <div className="text-sm text-[color:var(--muted)]">
-              {isParsing ? 'Parsing files...' : readyForMapping ? 'Mappings are editable' : 'Waiting for files'}
-            </div>
+            readyForMapping ? (
+              <button
+                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                type="button"
+                onClick={() => setIsMappingOpen(true)}
+              >
+                Open Mapping Popout
+              </button>
+            ) : (
+              <div className="text-sm text-[color:var(--muted)]">Waiting for files</div>
+            )
           }
         >
           {readyForMapping ? (
@@ -1315,27 +1404,63 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                     : 'none'}
                 </Notice>
                 <Notice tone={changeMissingMappings.length ? 'warning' : 'default'}>
-                  Change log missing required fields:{' '}
+                  History roster missing required fields:{' '}
                   {changeMissingMappings.length
                     ? changeMissingMappings.map((field) => field.label).join(', ')
                     : 'none'}
                 </Notice>
               </div>
-              <div className="grid gap-6 xl:grid-cols-2">
-                <MappingPanel
-                  title="Live Roster Schema"
-                  schema={LIVE_SCHEMA}
-                  headers={liveUpload.headers}
-                  mapping={mappings.live}
-                  onChange={(fieldKey, value) => handleMappingChange('live', fieldKey, value)}
-                />
-                <MappingPanel
-                  title="History Roster Schema"
-                  schema={CHANGE_SCHEMA}
-                  headers={changeUpload.headers}
-                  mapping={mappings.change}
-                  onChange={(fieldKey, value) => handleMappingChange('change', fieldKey, value)}
-                />
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[color:var(--ink)]">Live roster</div>
+                    <SourceTag tone={liveMissingMappings.length ? 'history' : 'output'}>
+                      {LIVE_SCHEMA.filter((field) => field.required).length - liveMissingMappings.length}/
+                      {LIVE_SCHEMA.filter((field) => field.required).length} required mapped
+                    </SourceTag>
+                  </div>
+                  <div className="mt-3 text-sm text-[color:var(--muted)]">
+                    {liveUpload.headers.length} headers loaded from the live roster.
+                  </div>
+                  <div className="mt-3 text-sm text-[color:var(--ink)]">
+                    {liveMissingMappings.length
+                      ? `Still needs: ${liveMissingMappings.map((field) => field.label).join(', ')}`
+                      : 'All required live roster fields are mapped.'}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[color:var(--ink)]">History roster</div>
+                    <SourceTag tone={changeMissingMappings.length ? 'history' : 'output'}>
+                      {CHANGE_SCHEMA.filter((field) => field.required).length -
+                        changeMissingMappings.length}
+                      /{CHANGE_SCHEMA.filter((field) => field.required).length} required mapped
+                    </SourceTag>
+                  </div>
+                  <div className="mt-3 text-sm text-[color:var(--muted)]">
+                    {changeUpload.headers.length} headers loaded from the history roster.
+                  </div>
+                  <div className="mt-3 text-sm text-[color:var(--ink)]">
+                    {changeMissingMappings.length
+                      ? `Still needs: ${changeMissingMappings.map((field) => field.label).join(', ')}`
+                      : 'All required history roster fields are mapped.'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-[color:var(--muted)]">
+                  Open the mapping popout to edit field selections without stretching the page.
+                </div>
+                <button
+                  className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)]"
+                  type="button"
+                  onClick={() => setIsMappingOpen(true)}
+                >
+                  Edit Mappings
+                </button>
               </div>
             </div>
           ) : (
@@ -1378,9 +1503,16 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
             ) : null}
 
             <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
-              <div className="overflow-x-auto">
+              <div className="flex items-center justify-between border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">Preview rows</div>
+                <div className="text-sm text-[color:var(--muted)]">
+                  Shows up to 50 rows in a fixed-height table. About {previewMaxRows} rows are
+                  visible before scrolling.
+                </div>
+              </div>
+              <div className="max-h-[30rem] overflow-auto">
                 <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
-                  <thead className="bg-[color:var(--surface-soft)]">
+                  <thead className="sticky top-0 bg-[color:var(--surface-soft)]">
                     <tr>
                       {PREVIEW_COLUMNS.map((column) => (
                         <th
@@ -1467,6 +1599,17 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         </Section>
 
         <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
+        <MappingModal
+          open={isMappingOpen}
+          onClose={() => setIsMappingOpen(false)}
+          isParsing={isParsing}
+          liveMissingMappings={liveMissingMappings}
+          changeMissingMappings={changeMissingMappings}
+          liveUpload={liveUpload}
+          changeUpload={changeUpload}
+          mappings={mappings}
+          onChange={handleMappingChange}
+        />
       </div>
     </main>
   );
