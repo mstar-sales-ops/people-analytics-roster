@@ -1,6 +1,6 @@
-# Historical Roster Builder
+# The Roster Stitcher
 
-Client-side React app for Sales Operations to merge a live roster with an SFDC change log and export a historical roster CSV.
+Client-side React app for Sales Operations to merge a live roster with an SFDC change log and export a stitched roster CSV.
 
 ## Local development
 

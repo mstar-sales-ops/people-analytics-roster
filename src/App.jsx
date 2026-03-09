@@ -559,6 +559,55 @@ function orderOutputColumns(columns) {
   });
 }
 
+function getInternalValueForLiveField(row, fieldKey) {
+  const fieldMap = {
+    SFDC_ID: row['Salesforce ID'],
+    Full_Name: row['Full Name'],
+    Hire_Date: row['Start Date'],
+    Termination_Date: row['End Date'],
+    Team: row.Team,
+    Manager: row.Manager,
+    Segment: row.Segment,
+    Function_Origin: row['Function Origin'],
+  };
+
+  return fieldMap[fieldKey] ?? '';
+}
+
+function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
+  const matchedHeaders = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
+  const orderedHeaders = [
+    ...matchedHeaders,
+    ...liveHeaders.filter((header) => !matchedHeaders.includes(header)),
+  ];
+  const headerToField = new Map(
+    Object.entries(liveMapping)
+      .filter(([, header]) => header)
+      .map(([fieldKey, header]) => [header, fieldKey]),
+  );
+
+  return {
+    columns: orderedHeaders,
+    rows: rows.map((row) =>
+      orderedHeaders.reduce((current, header) => {
+        const fieldKey = headerToField.get(header);
+
+        if (fieldKey) {
+          current[header] = getInternalValueForLiveField(row, fieldKey);
+        } else {
+          current[header] = row[`Live - ${header}`] ?? '';
+        }
+
+        return current;
+      }, {}),
+    ),
+    searchHeaders: {
+      salesforceId: liveMapping.SFDC_ID ?? '',
+      fullName: liveMapping.Full_Name ?? '',
+    },
+  };
+}
+
 function buildHistoricalRoster(liveRows, changeRows) {
   const issues = [];
   const liveById = new Map();
@@ -764,7 +813,7 @@ function downloadCsv(rows, columns) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.setAttribute('download', `historical-roster-${formatDate(Date.now())}.csv`);
+  anchor.setAttribute('download', `roster-stitcher-${formatDate(Date.now())}.csv`);
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -938,13 +987,12 @@ function groupDataQualityIssues(issues) {
   return [...groups.values()].sort((left, right) => right.items.length - left.items.length);
 }
 
-function groupExportColumns(columns) {
+function groupExportColumns(columns, liveMapping) {
+  const matchedColumns = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
+
   return {
-    stitched: columns.filter(
-      (column) => !column.startsWith('Live - ') && !column.startsWith('History - '),
-    ),
-    live: columns.filter((column) => column.startsWith('Live - ')),
-    history: columns.filter((column) => column.startsWith('History - ')),
+    matched: matchedColumns,
+    remaining: columns.filter((column) => !matchedColumns.includes(column)),
   };
 }
 
@@ -1152,6 +1200,7 @@ function ExportConfigurationModal({
   onClose,
   exportColumns,
   selectedExportColumns,
+  liveMapping,
   onToggleColumn,
   onSelectAll,
   onResetDefault,
@@ -1161,7 +1210,7 @@ function ExportConfigurationModal({
     return null;
   }
 
-  const groupedColumns = groupExportColumns(exportColumns);
+  const groupedColumns = groupExportColumns(exportColumns, liveMapping);
 
   function renderGroup(title, description, columns) {
     if (!columns.length) {
@@ -1203,8 +1252,8 @@ function ExportConfigurationModal({
               How the export will be organized
             </h3>
             <p className="mt-1 text-sm text-[color:var(--muted)]">
-              The CSV starts with stitched timeline columns, then appends extra live-roster fields
-              and history-roster fields using `Live - ...` and `History - ...` prefixes.
+              The CSV follows the live roster. First come the matched live-roster columns that the
+              stitcher updates, then the remaining live-roster columns in their original order.
             </p>
           </div>
           <button
@@ -1225,16 +1274,16 @@ function ExportConfigurationModal({
 
           <div className="grid gap-3 lg:grid-cols-3">
             <Notice>
-              <strong>Stitched columns:</strong> the main timeline fields such as rep, manager,
-              team, start date, and end date.
+              <strong>Matched columns:</strong> these are the live-roster columns the stitcher
+              updates with the final timeline values.
             </Notice>
             <Notice>
-              <strong>Live extras:</strong> original live-roster attributes repeated across each
-              stitched row for that rep.
+              <strong>Remaining live-roster columns:</strong> these follow after the matched set in
+              the same order they appeared in the uploaded live roster.
             </Notice>
             <Notice>
-              <strong>History extras:</strong> original history-roster attributes carried forward
-              from the change rows.
+              <strong>No extra columns:</strong> the export does not add history-only columns or
+              extra synthetic columns beyond what came from the live roster.
             </Notice>
           </div>
 
@@ -1268,19 +1317,14 @@ function ExportConfigurationModal({
           </div>
 
           {renderGroup(
-            'Stitched timeline columns',
-            'These are the primary columns most users keep in the export.',
-            groupedColumns.stitched,
+            'Matched live-roster columns',
+            'These are the live-roster columns the stitcher fills with the final timeline values.',
+            groupedColumns.matched,
           )}
           {renderGroup(
-            'Live roster columns',
-            'These came from the live roster file and follow each stitched row.',
-            groupedColumns.live,
-          )}
-          {renderGroup(
-            'History roster columns',
-            'These came from the history roster file and preserve row-level context.',
-            groupedColumns.history,
+            'Remaining live-roster columns',
+            'These stay in the same order they appeared in the uploaded live roster.',
+            groupedColumns.remaining,
           )}
         </div>
       </div>
@@ -1563,6 +1607,7 @@ function HistoricalRosterApp() {
   const [error, setError] = useState('');
   const [issues, setIssues] = useState([]);
   const [processedRows, setProcessedRows] = useState([]);
+  const [reviewRows, setReviewRows] = useState([]);
   const [stats, setStats] = useState({
     reps: 0,
     changeRows: 0,
@@ -1572,7 +1617,7 @@ function HistoricalRosterApp() {
       rowsRemoved: 0,
     },
   });
-  const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
+  const [exportColumns, setExportColumns] = useState([]);
   const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
   const [isExportConfigOpen, setIsExportConfigOpen] = useState(false);
@@ -1582,7 +1627,7 @@ function HistoricalRosterApp() {
     direction: 'asc',
   });
   const [issueSelections, setIssueSelections] = useState({});
-  const [selectedExportColumns, setSelectedExportColumns] = useState(PREVIEW_COLUMNS);
+  const [selectedExportColumns, setSelectedExportColumns] = useState([]);
 
   const liveMissingMappings = useMemo(
     () => getMissingRequiredMappings(mappings.live, LIVE_SCHEMA),
@@ -1592,19 +1637,21 @@ function HistoricalRosterApp() {
     () => getMissingRequiredMappings(mappings.change, CHANGE_SCHEMA),
     [mappings.change],
   );
-  const previewRows = useMemo(() => processedRows.slice(0, 50), [processedRows]);
   const filteredFinalRows = useMemo(() => {
     const query = finalViewSearch.trim().toLowerCase();
     if (!query) {
-      return processedRows;
+      return reviewRows;
     }
 
-    return processedRows.filter((row) => {
-      const fullName = String(row['Full Name'] ?? '').toLowerCase();
-      const salesforceId = String(row['Salesforce ID'] ?? '').toLowerCase();
+    const fullNameHeader = mappings.live.Full_Name ?? 'Full Name';
+    const salesforceIdHeader = mappings.live.SFDC_ID ?? 'Salesforce ID';
+
+    return reviewRows.filter((row) => {
+      const fullName = String(row[fullNameHeader] ?? '').toLowerCase();
+      const salesforceId = String(row[salesforceIdHeader] ?? '').toLowerCase();
       return fullName.includes(query) || salesforceId.includes(query);
     });
-  }, [finalViewSearch, processedRows]);
+  }, [finalViewSearch, mappings.live.Full_Name, mappings.live.SFDC_ID, reviewRows]);
   const sortedFinalRows = useMemo(() => {
     const rows = [...filteredFinalRows];
     const { column, direction } = finalViewSort;
@@ -1641,14 +1688,14 @@ function HistoricalRosterApp() {
     'History Roster required fields:',
     ...CHANGE_SCHEMA.filter((field) => field.required).map((field) => `- ${field.label}`),
   ].join('\n');
-  const previewMaxRows = 8;
 
   async function handleUpload(kind, file) {
     setError('');
     setIssues([]);
     setProcessedRows([]);
+    setReviewRows([]);
     setIssueSelections({});
-    setSelectedExportColumns(PREVIEW_COLUMNS);
+    setSelectedExportColumns([]);
     setStats({
       reps: 0,
       changeRows: 0,
@@ -1658,7 +1705,7 @@ function HistoricalRosterApp() {
         rowsRemoved: 0,
       },
     });
-    setExportColumns(PREVIEW_COLUMNS);
+    setExportColumns([]);
 
     if (!file) {
       if (kind === 'live') {
@@ -1717,9 +1764,10 @@ function HistoricalRosterApp() {
 
   function handleMappingChange(kind, fieldKey, value) {
     setProcessedRows([]);
+    setReviewRows([]);
     setIssues([]);
     setIssueSelections({});
-    setSelectedExportColumns(PREVIEW_COLUMNS);
+    setSelectedExportColumns([]);
     setStats({
       reps: 0,
       changeRows: 0,
@@ -1729,7 +1777,7 @@ function HistoricalRosterApp() {
         rowsRemoved: 0,
       },
     });
-    setExportColumns(PREVIEW_COLUMNS);
+    setExportColumns([]);
 
     setMappings((current) => ({
       ...current,
@@ -1749,7 +1797,7 @@ function HistoricalRosterApp() {
     setError('');
     setIssues([]);
     setIssueSelections({});
-    setSelectedExportColumns(PREVIEW_COLUMNS);
+    setSelectedExportColumns([]);
     setIsProcessing(true);
 
     try {
@@ -1765,19 +1813,22 @@ function HistoricalRosterApp() {
       );
 
       const output = buildHistoricalRoster(standardizedLiveRows, standardizedChangeRows);
+      const liveOrderedOutput = buildLiveOrderedOutput(output.rows, liveUpload.headers, mappings.live);
       setProcessedRows(output.rows);
+      setReviewRows(liveOrderedOutput.rows);
       setIssues(output.issues);
       setStats({
         ...output.stats,
         uncollapsedRowCount: output.uncollapsedRowCount,
         collapseSummary: output.collapseSummary,
       });
-      setExportColumns(output.exportColumns);
-      setSelectedExportColumns(output.exportColumns);
+      setExportColumns(liveOrderedOutput.columns);
+      setSelectedExportColumns(liveOrderedOutput.columns);
     } catch (processingError) {
       setProcessedRows([]);
+      setReviewRows([]);
       setIssueSelections({});
-      setSelectedExportColumns(PREVIEW_COLUMNS);
+      setSelectedExportColumns([]);
       setStats({
         reps: 0,
         changeRows: 0,
@@ -1787,7 +1838,7 @@ function HistoricalRosterApp() {
           rowsRemoved: 0,
         },
       });
-      setExportColumns(PREVIEW_COLUMNS);
+      setExportColumns([]);
       setError(processingError.message || 'The uploaded data could not be transformed.');
     } finally {
       setIsProcessing(false);
@@ -1819,7 +1870,7 @@ function HistoricalRosterApp() {
   }
 
   function handleResetDefaultExportColumns() {
-    setSelectedExportColumns(PREVIEW_COLUMNS.filter((column) => exportColumns.includes(column)));
+    setSelectedExportColumns(exportColumns);
   }
 
   return (
@@ -1829,10 +1880,10 @@ function HistoricalRosterApp() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--brand)]">
-                Sales Ops Tool
+                The Roster Stitcher
               </div>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[color:var(--ink)]">
-                Historical Roster Builder
+                The Roster Stitcher
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
                 Upload your two files, check the column matches, build the roster, then review and
@@ -1864,8 +1915,8 @@ function HistoricalRosterApp() {
           <StatTile label="Rows Parsed" value={liveUpload.rows.length + changeUpload.rows.length} />
           <StatTile
             label="Output Rows"
-            value={processedRows.length}
-            tone={processedRows.length ? 'success' : 'default'}
+            value={reviewRows.length}
+            tone={reviewRows.length ? 'success' : 'default'}
           />
         </section>
 
@@ -1986,7 +2037,7 @@ function HistoricalRosterApp() {
 
         <Section
           title="Build Roster"
-          description="Create the final historical roster from the two uploaded files."
+          description="Create the final stitched roster from the two uploaded files."
           right={
             <button
               className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
@@ -2070,7 +2121,7 @@ function HistoricalRosterApp() {
                 </div>
               </details>
             ) : null}
-            {!processedRows.length ? (
+            {!reviewRows.length ? (
               <Notice>When you click Build roster, the final roster will appear in the review section below.</Notice>
             ) : null}
           </div>
@@ -2081,7 +2132,7 @@ function HistoricalRosterApp() {
           description="Search for a person, sort the results, and export the final roster."
           right={
             <div className="flex flex-col gap-2 sm:items-end">
-              {processedRows.length ? (
+              {reviewRows.length ? (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
@@ -2100,19 +2151,19 @@ function HistoricalRosterApp() {
                   <button
                     className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
                     type="button"
-                    disabled={!processedRows.length || selectedExportColumns.length === 0}
-                    onClick={() => downloadCsv(processedRows, selectedExportColumns)}
+                    disabled={!reviewRows.length || selectedExportColumns.length === 0}
+                    onClick={() => downloadCsv(reviewRows, selectedExportColumns)}
                   >
                     Export CSV
                   </button>
                 </div>
               ) : null}
               <div className="text-sm text-[color:var(--muted)]">
-                {processedRows.length
-                  ? `${sortedFinalRows.length} of ${processedRows.length} rows shown`
+                {reviewRows.length
+                  ? `${sortedFinalRows.length} of ${reviewRows.length} rows shown`
                   : 'Process data to unlock the final view'}
               </div>
-              {processedRows.length ? (
+              {reviewRows.length ? (
                 <div className="text-sm text-[color:var(--muted)]">
                   Search by full name or Salesforce ID. Exporting {selectedExportColumns.length} columns.
                 </div>
@@ -2120,7 +2171,7 @@ function HistoricalRosterApp() {
             </div>
           }
         >
-          {processedRows.length ? (
+          {reviewRows.length ? (
             <div className="space-y-4">
               <div className="grid gap-3 lg:grid-cols-3">
                 <Notice>
@@ -2282,6 +2333,7 @@ function HistoricalRosterApp() {
           onClose={() => setIsExportConfigOpen(false)}
           exportColumns={exportColumns}
           selectedExportColumns={selectedExportColumns}
+          liveMapping={mappings.live}
           onToggleColumn={handleToggleExportColumn}
           onSelectAll={() => setSelectedExportColumns(exportColumns)}
           onResetDefault={handleResetDefaultExportColumns}
