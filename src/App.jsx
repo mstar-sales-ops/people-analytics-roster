@@ -10,6 +10,7 @@ const PREVIEW_COLUMNS = [
   'Manager',
   'Start Date',
   'End Date',
+  'Current_Record',
   'Team',
   'Segment',
   'Is_Active',
@@ -23,6 +24,7 @@ const PRIMARY_OUTPUT_ORDER = [
   'Manager',
   'Start Date',
   'End Date',
+  'Current_Record',
 ];
 
 const LIVE_SCHEMA = [
@@ -480,7 +482,7 @@ function consolidateChangesForRep(changes) {
 }
 
 function rowsMatchAcrossAttributes(leftRow, rightRow) {
-  const ignoredColumns = new Set(['Start Date', 'End Date', 'Is_Active']);
+  const ignoredColumns = new Set(['Start Date', 'End Date', 'Is_Active', 'Current_Record']);
   const keys = new Set([...Object.keys(leftRow), ...Object.keys(rightRow)]);
 
   for (const key of keys) {
@@ -523,6 +525,7 @@ function collapseAdjacentMatchingRows(rows) {
     ) {
       lastRow['End Date'] = row['End Date'];
       lastRow.Is_Active = row.Is_Active;
+      lastRow.Current_Record = row.Current_Record;
       mergedGroups += 1;
       rowsRemoved += 1;
       return;
@@ -578,6 +581,7 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
   const matchedHeaders = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
   const orderedHeaders = [
     ...matchedHeaders,
+    'Current_Record',
     ...liveHeaders.filter((header) => !matchedHeaders.includes(header)),
   ];
   const headerToField = new Map(
@@ -590,6 +594,11 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping) {
     columns: orderedHeaders,
     rows: rows.map((row) =>
       orderedHeaders.reduce((current, header) => {
+        if (header === 'Current_Record') {
+          current[header] = row.Current_Record;
+          return current;
+        }
+
         const fieldKey = headerToField.get(header);
 
         if (fieldKey) {
@@ -686,7 +695,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
     });
   }
 
-  function buildOutputRow(rep, activeState, startDate, endDate) {
+  function buildOutputRow(rep, activeState, startDate, endDate, currentRecord) {
     const row = {
       'Salesforce ID': rep.salesforceId,
       'Full Name': activeState.fullName || rep.fullName || '',
@@ -697,6 +706,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
       'Function Origin': activeState.functionOrigin || rep.functionOrigin || '',
       'Start Date': formatDate(startDate),
       'End Date': formatDate(endDate),
+      Current_Record: currentRecord,
       Is_Active: !endDate,
       ...rep.passthrough,
       ...(activeState.passthrough ?? {}),
@@ -745,7 +755,9 @@ function buildHistoricalRoster(liveRows, changeRows) {
         return;
       }
 
-      results.push(buildOutputRow(rep, activeState, activeStart, subtractOneDay(change.changeDate)));
+      results.push(
+        buildOutputRow(rep, activeState, activeStart, subtractOneDay(change.changeDate), false),
+      );
 
       activeStart = change.changeDate;
       activeState = {
@@ -778,7 +790,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
     const finalEndDate =
       rep.terminationDate && rep.terminationDate >= activeStart ? rep.terminationDate : null;
 
-    results.push(buildOutputRow(rep, activeState, activeStart, finalEndDate));
+    results.push(buildOutputRow(rep, activeState, activeStart, finalEndDate, true));
   });
 
   const sortedRows = results.sort((left, right) => {
@@ -992,7 +1004,10 @@ function groupExportColumns(columns, liveMapping) {
 
   return {
     matched: matchedColumns,
-    remaining: columns.filter((column) => !matchedColumns.includes(column)),
+    derived: columns.filter((column) => column === 'Current_Record'),
+    remaining: columns.filter(
+      (column) => !matchedColumns.includes(column) && column !== 'Current_Record',
+    ),
   };
 }
 
@@ -1282,8 +1297,8 @@ function ExportConfigurationModal({
               the same order they appeared in the uploaded live roster.
             </Notice>
             <Notice>
-              <strong>No extra columns:</strong> the export does not add history-only columns or
-              extra synthetic columns beyond what came from the live roster.
+              <strong>Added status column:</strong> <strong>Current_Record</strong> is included so
+              you can see which row is the final state of that employment timeline.
             </Notice>
           </div>
 
@@ -1320,6 +1335,11 @@ function ExportConfigurationModal({
             'Matched live-roster columns',
             'These are the live-roster columns the stitcher fills with the final timeline values.',
             groupedColumns.matched,
+          )}
+          {renderGroup(
+            'Added stitched status columns',
+            'These are calculated by the stitcher and added to the export.',
+            groupedColumns.derived,
           )}
           {renderGroup(
             'Remaining live-roster columns',
