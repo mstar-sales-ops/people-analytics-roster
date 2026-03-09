@@ -813,7 +813,7 @@ function downloadCsv(rows, columns) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.setAttribute('download', `roster-stitcher-${formatDate(Date.now())}.csv`);
+  anchor.setAttribute('download', `roster-stitch-${formatDate(Date.now())}.csv`);
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -1880,10 +1880,10 @@ function HistoricalRosterApp() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--brand)]">
-                The Roster Stitcher
+                Roster Stitch
               </div>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[color:var(--ink)]">
-                The Roster Stitcher
+                Roster Stitch
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
                 Upload your two files, check the column matches, build the roster, then review and

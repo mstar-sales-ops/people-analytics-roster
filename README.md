@@ -1,4 +1,4 @@
-# The Roster Stitcher
+# Roster Stitch
 
 Client-side React app for Sales Operations to merge a live roster with an SFDC change log and export a stitched roster CSV.
 
