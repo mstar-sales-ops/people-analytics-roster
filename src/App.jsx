@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import Papa from 'papaparse';
-import OnboardingWizard from './components/onboarding/OnboardingWizard.jsx';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_COLUMNS = [
@@ -1187,6 +1186,12 @@ function ExportConfigurationModal({
         </div>
 
         <div className="space-y-4 px-5 py-5">
+          <Notice tone="warning">
+            <strong>Anchor rule:</strong> the <strong>Live Roster</strong> is the main roster. A
+            person must exist in the live roster to appear in the export. If a history-roster row
+            does not match a live-roster Salesforce ID, it is not included in the final CSV.
+          </Notice>
+
           <div className="grid gap-3 lg:grid-cols-3">
             <Notice>
               <strong>Stitched columns:</strong> the main timeline fields such as rep, manager,
@@ -1518,7 +1523,7 @@ function ExampleStoryModal({ open, onClose }) {
   );
 }
 
-function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
+function HistoricalRosterApp() {
   const [liveUpload, setLiveUpload] = useState(EMPTY_UPLOAD);
   const [changeUpload, setChangeUpload] = useState(EMPTY_UPLOAD);
   const [mappings, setMappings] = useState({ live: {}, change: {} });
@@ -1783,7 +1788,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     <main className="min-h-screen bg-[color:var(--surface)] px-4 py-6 text-[color:var(--ink)] sm:px-6">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="rounded-2xl border border-[color:var(--line)] bg-white px-5 py-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--brand)]">
                 Sales Ops Tool
@@ -1792,33 +1797,21 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                 Historical Roster Builder
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
-                Upload a live roster and a history roster, map the required columns, then export one
-                historical roster file. The processing happens in the browser.
+                Upload your two files, check the column matches, build the roster, then review and
+                export the final result.
               </p>
-              {onboardingSession ? (
-                <div className="mt-3 rounded-xl border border-[color:var(--success-line)] bg-[color:var(--success-bg)] px-4 py-3 text-sm text-[color:var(--ink)]">
-                  Pre-ingestion onboarding completed for{' '}
-                  <strong>{onboardingSession.uploadedFile?.name ?? 'uploaded roster'}</strong>.{' '}
-                  {onboardingSession.validationResults.summary.requiredFieldsMapped}/5 required
-                  fields mapped before entering the main app.
-                </div>
-              ) : null}
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
-                {readyToProcess
-                  ? 'Ready to process'
-                  : readyForMapping
-                    ? 'Finish required mapping'
-                    : 'Upload both files'}
+              <div className="mt-3 rounded-xl border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)] px-4 py-3 text-sm text-[color:var(--ink)]">
+                <strong>How this works:</strong> the <strong>Live Roster</strong> is your main
+                list. We only build timelines for people who are in the live roster. If someone
+                only appears in the history file, they will not be included.
               </div>
-              <button
-                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
-                type="button"
-                onClick={onRestartOnboarding}
-              >
-                Restart onboarding
-              </button>
+            </div>
+            <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
+              {readyToProcess
+                ? 'Ready to build roster'
+                : readyForMapping
+                  ? 'Check the column matches'
+                  : 'Upload both files to begin'}
             </div>
           </div>
         </header>
@@ -1843,7 +1836,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         </section>
 
         <Section
-          title="1. Upload Files"
+          title="Upload Your Files"
           description="Load the live roster and the history roster."
         >
           <div className="grid gap-4 lg:grid-cols-2">
@@ -1867,8 +1860,8 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         </Section>
 
         <Section
-          title="2. Map Columns"
-          description="Required fields must be mapped before processing can run."
+          title="Match Your Columns"
+          description="Check that the important columns were matched correctly before building the roster."
           right={
             readyForMapping ? (
               <button
@@ -1958,8 +1951,8 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         </Section>
 
         <Section
-          title="3. Process and Export"
-          description="Generate the merged historical roster, review the first 50 rows, then export the full dataset."
+          title="Build Roster"
+          description="Create the final historical roster from the two uploaded files."
           right={
             <button
               className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
@@ -1973,23 +1966,6 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         >
           <div className="space-y-4">
             {error ? <Notice tone="error">{error}</Notice> : null}
-
-            {processedRows.length ? (
-              <div className="grid gap-3 lg:grid-cols-3">
-                <Notice>
-                  <strong>Rule:</strong> collapse adjacent identical eras when every attribute
-                  matches and the end date rolls directly into the next start date.
-                </Notice>
-                <Notice tone={stats.collapseSummary.rowsRemoved ? 'warning' : 'default'}>
-                  <strong>Matches found:</strong> {stats.collapseSummary.mergedGroups} adjacent
-                  match{stats.collapseSummary.mergedGroups === 1 ? '' : 'es'}.
-                </Notice>
-                <Notice tone={stats.collapseSummary.rowsRemoved ? 'warning' : 'default'}>
-                  <strong>Decision:</strong> removed {stats.collapseSummary.rowsRemoved} duplicate
-                  row{stats.collapseSummary.rowsRemoved === 1 ? '' : 's'} and kept date continuity.
-                </Notice>
-              </div>
-            ) : null}
 
             {issues.length > 0 ? (
               <details className="overflow-hidden rounded-xl border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)]">
@@ -2060,65 +2036,15 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                 </div>
               </details>
             ) : null}
-
-            <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
-              <div className="flex items-center justify-between border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">Preview rows</div>
-                <div className="text-sm text-[color:var(--muted)]">
-                  Showing {processedRows.length} final row{processedRows.length === 1 ? '' : 's'}
-                  {stats.uncollapsedRowCount
-                    ? ` after collapsing ${stats.uncollapsedRowCount - processedRows.length} redundant row${
-                        stats.uncollapsedRowCount - processedRows.length === 1 ? '' : 's'
-                      }.`
-                    : '.'}{' '}
-                  About {previewMaxRows} rows are visible before scrolling.
-                </div>
-              </div>
-              <div className="max-h-[30rem] overflow-auto">
-                <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
-                  <thead className="sticky top-0 bg-[color:var(--surface-soft)]">
-                    <tr>
-                      {PREVIEW_COLUMNS.map((column) => (
-                        <th
-                          key={column}
-                          className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]"
-                        >
-                          {column}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[color:var(--line)] bg-white">
-                    {previewRows.length > 0 ? (
-                      previewRows.map((row, index) => (
-                        <tr key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}>
-                          {PREVIEW_COLUMNS.map((column) => (
-                            <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
-                              {String(row[column] ?? '')}
-                            </td>
-                          ))}
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={PREVIEW_COLUMNS.length}
-                          className="px-4 py-16 text-center text-sm text-[color:var(--muted)]"
-                        >
-                          Process the files to populate the preview table.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {!processedRows.length ? (
+              <Notice>When you click Build roster, the final roster will appear in the review section below.</Notice>
+            ) : null}
           </div>
         </Section>
 
         <Section
-          title="4. Final View"
-          description="Search for a person and sort the full stitched output by any column."
+          title="Review Final Roster"
+          description="Search for a person, sort the results, and export the final roster."
           right={
             <div className="flex flex-col gap-2 sm:items-end">
               {processedRows.length ? (
@@ -2155,14 +2081,28 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         >
           {processedRows.length ? (
             <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-3">
+                <Notice>
+                  <strong>Live roster:</strong> decides who is included in the final result.
+                </Notice>
+                <Notice>
+                  <strong>History roster:</strong> fills in where each included person used to sit.
+                </Notice>
+                <Notice tone={stats.collapseSummary.rowsRemoved ? 'warning' : 'default'}>
+                  <strong>Automatic cleanup:</strong> merged {stats.collapseSummary.rowsRemoved}{' '}
+                  duplicate row{stats.collapseSummary.rowsRemoved === 1 ? '' : 's'} where nothing
+                  changed except continuous dates.
+                </Notice>
+              </div>
+
               <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
                 <div className="border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
                   <div className="text-sm font-semibold text-[color:var(--ink)]">
-                    Stitcher checks and cleanup summary
+                    What the tool checked
                   </div>
                   <div className="mt-1 text-sm text-[color:var(--muted)]">
-                    This shows what the stitcher looked for, what it solved, and how often each
-                    pattern appeared in this run.
+                    This shows the cleanup rules and issue checks the tool applied while building
+                    the roster.
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -2291,42 +2231,19 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
               </div>
             </div>
           ) : (
-            <Notice>Process the files first to review the full stitched history.</Notice>
+            <Notice>Build the roster first to review the final results and export choices.</Notice>
           )}
         </Section>
 
-        <Section
-          title="Example Output"
-          description="Open a walkthrough that compares the snapshot view from the live roster against the fuller story revealed by the history roster."
-          right={
-            <button
-              className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)]"
-              type="button"
-              onClick={() => setIsExampleOpen(true)}
-            >
-              Open Example Popout
-            </button>
-          }
-        >
-          <div className="space-y-4">
-            <Notice>
-              <strong>Why this matters:</strong> the live roster only shows the rep&apos;s current
-              state. The popout example shows how the change file reveals earlier manager, team, and
-              function history that would otherwise be invisible.
-            </Notice>
-            <div className="grid gap-3 lg:grid-cols-3">
-              <Notice>
-                <strong>Before stitching:</strong> one current-state row from the live roster.
-              </Notice>
-              <Notice>
-                <strong>History applied:</strong> multiple effective-date rows from the change file.
-              </Notice>
-              <Notice>
-                <strong>After stitching:</strong> clean time-bound eras for the rep&apos;s real story.
-              </Notice>
-            </div>
-          </div>
-        </Section>
+        <div className="flex justify-end">
+          <button
+            className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+            type="button"
+            onClick={() => setIsExampleOpen(true)}
+          >
+            See Example
+          </button>
+        </div>
 
         <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
         <ExportConfigurationModal
@@ -2356,16 +2273,5 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
 }
 
 export default function App() {
-  const [onboardingSession, setOnboardingSession] = useState(null);
-
-  if (!onboardingSession) {
-    return <OnboardingWizard onComplete={setOnboardingSession} />;
-  }
-
-  return (
-    <HistoricalRosterApp
-      onboardingSession={onboardingSession}
-      onRestartOnboarding={() => setOnboardingSession(null)}
-    />
-  );
+  return <HistoricalRosterApp />;
 }
