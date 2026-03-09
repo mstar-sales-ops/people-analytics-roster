@@ -157,6 +157,16 @@ export default function OnboardingWizard({ onComplete }) {
             suggestions={mappingSuggestions}
             validationResults={validationResults}
           />
+          <div className="flex justify-end">
+            <button
+              className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
+              type="button"
+              disabled={!uploadedFile}
+              onClick={() => setCurrentStep(3)}
+            >
+              Next
+            </button>
+          </div>
           <DataPreviewTable headers={parseState.headers} rows={parseState.previewRows} />
         </div>
       );
@@ -278,7 +288,7 @@ export default function OnboardingWizard({ onComplete }) {
             </button>
           ) : null}
 
-          {currentStep < 4 ? (
+          {currentStep < 4 && currentStep !== 2 ? (
             <button
               className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
               type="button"
