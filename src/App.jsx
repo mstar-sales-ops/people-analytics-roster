@@ -726,6 +726,20 @@ function ExampleTable({ columns, rows, tone = 'default' }) {
   );
 }
 
+function StoryCard({ step, title, children }) {
+  return (
+    <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--brand)] text-sm font-semibold text-white">
+          {step}
+        </div>
+        <div className="text-base font-semibold text-[color:var(--ink)]">{title}</div>
+      </div>
+      <div className="mt-3 text-sm leading-6 text-[color:var(--ink)]">{children}</div>
+    </div>
+  );
+}
+
 function ExampleStoryModal({ open, onClose }) {
   if (!open) {
     return null;
@@ -754,77 +768,92 @@ function ExampleStoryModal({ open, onClose }) {
 
         <div className="space-y-6 px-5 py-5">
           <Notice>
-            <strong>What the live roster says right now:</strong> Avery Morgan is currently in
-            Mid-Market, reporting to Taylor Chen, working as Direct AM. That is useful, but it is
-            only the current snapshot.
+            <strong>Short version:</strong> the live roster shows where Avery is now. The history
+            file shows where Avery used to be. The stitched export puts those moments in order so
+            you can see the full story.
           </Notice>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <StoryCard step="1" title="What the live roster says now">
+              Avery Morgan is in <strong>Mid-Market</strong>, reports to{' '}
+              <strong>Taylor Chen</strong>, and works as <strong>Direct AM</strong>.
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SourceTag>Comes from roster</SourceTag>
+                <SourceTag>Current snapshot</SourceTag>
+              </div>
+            </StoryCard>
+
+            <StoryCard step="2" title="What the history file adds">
+              Avery started in <strong>SMB</strong> as an <strong>SDR</strong>, then moved to{' '}
+              <strong>Enterprise</strong>, then later changed to a new manager and team.
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SourceTag tone="history">Comes from change log</SourceTag>
+                <SourceTag tone="history">Shows past changes</SourceTag>
+              </div>
+            </StoryCard>
+
+            <StoryCard step="3" title="What the final export tells you">
+              The final file gives you <strong>one row for each chapter</strong> of Avery&apos;s
+              journey, with a clear start date and end date for each chapter.
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SourceTag tone="output">Final stitched truth</SourceTag>
+                <SourceTag tone="output">Easy to read</SourceTag>
+              </div>
+            </StoryCard>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">Snapshot from the live roster</div>
-                <SourceTag>Comes from roster</SourceTag>
+                <div className="text-sm font-semibold text-[color:var(--ink)]">Before stitching</div>
+                <SourceTag>Too simple</SourceTag>
               </div>
               <ExampleTable
-                columns={[
-                  'SFDC_ID',
-                  'Full_Name',
-                  'Hire_Date',
-                  'Termination_Date',
-                  'Team',
-                  'Manager',
-                  'Segment',
-                  'Function_Origin',
-                ]}
+                columns={['Full_Name', 'Team', 'Manager', 'Function_Origin']}
                 rows={[EXAMPLE_RECORD.liveRoster]}
               />
               <div className="text-sm leading-6 text-[color:var(--muted)]">
-                If you only had the live roster, you would assume this rep had always been in
-                Mid-Market under Taylor Chen as a Direct AM. That is not the full story.
+                By itself, this looks like Avery was always in this team and always had this
+                manager.
               </div>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">Rows from the historical change file</div>
-                <SourceTag tone="history">Comes from change log</SourceTag>
+                <div className="text-sm font-semibold text-[color:var(--ink)]">Simple change story</div>
+                <SourceTag tone="history">What changed over time</SourceTag>
               </div>
-              <ExampleTable
-                columns={['Change_Date', 'Team', 'Manager', 'Segment', 'Function_Origin', 'note']}
-                rows={EXAMPLE_RECORD.changeLog}
-              />
-              <div className="text-sm leading-6 text-[color:var(--muted)]">
-                These rows reveal the actual path: the rep started in SMB as an SDR, moved into
-                Enterprise and into a Direct AM function, then later changed manager and team on the
-                same day.
+              <div className="rounded-xl border border-[color:var(--line)] bg-white">
+                <div className="divide-y divide-[color:var(--line)]">
+                  <div className="px-4 py-3 text-sm text-[color:var(--ink)]">
+                    <strong>2022-01-10:</strong> Avery starts in SMB as an SDR under Jamie Lee.
+                  </div>
+                  <div className="px-4 py-3 text-sm text-[color:var(--ink)]">
+                    <strong>2023-06-01:</strong> Avery moves to Enterprise and changes function to
+                    Direct AM.
+                  </div>
+                  <div className="px-4 py-3 text-sm text-[color:var(--ink)]">
+                    <strong>2024-02-15:</strong> Avery changes manager to Taylor Chen and moves to
+                    Mid-Market.
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Notice>
-              <strong>Manager change:</strong> the history file shows Taylor Chen taking over on
-              2024-02-15.
-            </Notice>
-            <Notice>
-              <strong>Function change:</strong> the rep changed from `SDR` to `Direct AM` on
-              2023-06-01.
-            </Notice>
-            <Notice>
-              <strong>Same-day cleanup:</strong> the 2024-02-15 manager and team updates collapse
-              into one final row instead of creating overlapping eras.
-            </Notice>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Stitched export rows</div>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Final export, simplified</div>
               <SourceTag tone="output">Final stitched truth</SourceTag>
             </div>
-            <ExampleTable columns={[...PREVIEW_COLUMNS, 'why']} rows={EXAMPLE_RECORD.output} tone="output" />
+            <ExampleTable
+              columns={['Start Date', 'End Date', 'Team', 'Manager', 'Function Origin']}
+              rows={EXAMPLE_RECORD.output}
+              tone="output"
+            />
             <div className="text-sm leading-6 text-[color:var(--muted)]">
-              This is what you actually want in the export: one row per era, with a clean start and
-              end date for each team-manager-function combination.
+              This is the point of the stitched roster: a short, clear timeline showing when the rep
+              was in each team, under each manager, and in each function.
             </div>
           </div>
         </div>
