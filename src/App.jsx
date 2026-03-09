@@ -768,7 +768,6 @@ function compareCellValues(leftValue, rightValue) {
 }
 
 function buildCleanupRecommendations(issues, processedRows, stats) {
-  const recommendations = [];
   const missingIdIssueCount = issues.filter(
     (issue) =>
       issue.includes('missing SFDC_ID') || issue.includes('missing SFDC_ID or Change_Date'),
@@ -778,61 +777,145 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
   const blankManagerCount = processedRows.filter((row) => !cleanValue(row.Manager)).length;
   const blankTeamCount = processedRows.filter((row) => !cleanValue(row.Team)).length;
 
-  if (missingIdIssueCount > 0) {
-    recommendations.push({
-      title: 'Fill missing identifiers',
-      impactedCount: missingIdIssueCount,
-      detail: 'Some source rows are missing SFDC_ID or Change_Date, so they cannot be stitched safely.',
-      action: 'Backfill the missing ID/date values in the source roster before the next import.',
-    });
-  }
-
-  if (invalidDateIssueCount > 0) {
-    recommendations.push({
-      title: 'Standardize invalid dates',
-      impactedCount: invalidDateIssueCount,
-      detail: 'Some source rows contain dates the parser could not trust.',
-      action: 'Normalize those dates to YYYY-MM-DD or a consistent slash format before re-importing.',
-    });
-  }
-
-  if (duplicateIdIssueCount > 0) {
-    recommendations.push({
-      title: 'Review duplicate Salesforce IDs',
-      impactedCount: duplicateIdIssueCount,
-      detail: 'Duplicate IDs in the live roster can create conflicting anchor records.',
-      action: 'Confirm whether those are true duplicates or should be separate reps before rerunning.',
-    });
-  }
-
-  if (blankManagerCount > 0 || blankTeamCount > 0) {
-    recommendations.push({
-      title: 'Backfill blank stitched attributes',
-      impactedCount: blankManagerCount + blankTeamCount,
-      detail: 'Some final rows still have blank manager or team values after stitching.',
-      action: 'Review the history roster for incomplete manager/team updates and fill the missing values upstream.',
-    });
-  }
-
-  if (stats.collapseSummary.rowsRemoved > 0) {
-    recommendations.push({
-      title: 'Consolidate redundant change rows upstream',
+  return [
+    {
+      title: 'Adjacent identical era collapse',
       impactedCount: stats.collapseSummary.rowsRemoved,
-      detail: 'Adjacent stitched rows were identical except for date continuity, so they were collapsed automatically.',
-      action: 'Consider deduplicating repeated same-state history rows in the source file to reduce noise.',
-    });
+      solved:
+        'Merged back-to-back stitched rows when every attribute matched and the dates were continuous.',
+      detail:
+        'This keeps the historical roster readable by removing duplicate chapters that only differ by a one-day boundary.',
+      example:
+        'Example: one row ends on 2023-07-10 and the next identical row starts on 2023-07-11, so they become one longer era.',
+    },
+    {
+      title: 'Missing identifiers or change dates',
+      impactedCount: missingIdIssueCount,
+      solved:
+        'Flagged source rows that cannot be stitched safely because a key identifier or effective date is missing.',
+      detail:
+        'Without an SFDC_ID or Change_Date, the stitcher cannot place that row into the correct person timeline.',
+      example:
+        'Example: "History Roster row 42: missing SFDC_ID or Change_Date."',
+    },
+    {
+      title: 'Invalid date values',
+      impactedCount: invalidDateIssueCount,
+      solved:
+        'Caught source dates that the parser could not trust before they created bad start or end dates.',
+      detail:
+        'This protects the output from broken timelines caused by malformed hire dates or other invalid date fields.',
+      example:
+        'Example: "Live Roster row 18: invalid Hire_Date for 0058A00000ABC123."',
+    },
+    {
+      title: 'Duplicate live roster IDs',
+      impactedCount: duplicateIdIssueCount,
+      solved:
+        'Flagged anchor-record conflicts where the live roster contains the same Salesforce ID more than once.',
+      detail:
+        'Duplicate live IDs can make the final current-state anchor ambiguous, even if the history file is clean.',
+      example:
+        'Example: "Live Roster row 77: duplicate SFDC_ID 0058A00000ABC123."',
+    },
+    {
+      title: 'Blank stitched manager or team',
+      impactedCount: blankManagerCount + blankTeamCount,
+      solved:
+        'Highlighted final rows where core stitched attributes still ended blank after processing.',
+      detail:
+        'These rows usually point to incomplete updates in the history roster or missing anchor values in the live roster.',
+      example:
+        'Example: a final row has a valid Start Date and rep name, but Team or Manager is still blank.',
+    },
+  ];
+}
+
+function InfoTooltip({ detail, example }) {
+  return (
+    <div className="group relative flex justify-center">
+      <button
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-sm font-semibold text-[color:var(--muted)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+        type="button"
+        aria-label="More details"
+      >
+        ?
+      </button>
+      <div className="pointer-events-none absolute right-0 top-9 z-10 hidden w-72 rounded-xl border border-[color:var(--line)] bg-white p-3 text-left shadow-[0_16px_40px_rgba(38,47,48,0.18)] group-hover:block group-focus-within:block">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]">
+          More detail
+        </div>
+        <div className="mt-2 text-sm leading-6 text-[color:var(--ink)]">{detail}</div>
+        <div className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]">
+          Example
+        </div>
+        <div className="mt-2 text-sm leading-6 text-[color:var(--ink)]">{example}</div>
+      </div>
+    </div>
+  );
+}
+
+function classifyDataQualityIssue(issue) {
+  if (issue.includes('missing SFDC_ID or Change_Date')) {
+    return {
+      key: 'missing-history-id-or-date',
+      title: 'History rows missing ID or change date',
+    };
   }
 
-  if (recommendations.length === 0) {
-    recommendations.push({
-      title: 'No urgent cleanup updates',
-      impactedCount: 0,
-      detail: 'This stitched output does not show a major cleanup pattern right now.',
-      action: 'You can export as-is, then use search and sorting to spot any rep-specific edge cases.',
-    });
+  if (issue.includes('missing SFDC_ID')) {
+    return {
+      key: 'missing-live-id',
+      title: 'Live roster rows missing SFDC_ID',
+    };
   }
 
-  return recommendations;
+  if (issue.includes('invalid Hire_Date')) {
+    return {
+      key: 'invalid-hire-date',
+      title: 'Invalid hire dates',
+    };
+  }
+
+  if (issue.includes('duplicate SFDC_ID')) {
+    return {
+      key: 'duplicate-live-id',
+      title: 'Duplicate live roster IDs',
+    };
+  }
+
+  return {
+    key: 'other',
+    title: 'Other data quality notes',
+  };
+}
+
+function groupDataQualityIssues(issues) {
+  const groups = new Map();
+
+  issues.forEach((issue) => {
+    const classification = classifyDataQualityIssue(issue);
+    if (!groups.has(classification.key)) {
+      groups.set(classification.key, {
+        ...classification,
+        items: [],
+      });
+    }
+
+    groups.get(classification.key).items.push(issue);
+  });
+
+  return [...groups.values()].sort((left, right) => right.items.length - left.items.length);
+}
+
+function groupExportColumns(columns) {
+  return {
+    stitched: columns.filter(
+      (column) => !column.startsWith('Live - ') && !column.startsWith('History - '),
+    ),
+    live: columns.filter((column) => column.startsWith('Live - ')),
+    history: columns.filter((column) => column.startsWith('History - ')),
+  };
 }
 
 function Section({ title, description, right, children }) {
@@ -1030,6 +1113,141 @@ function StoryCard({ step, title, children }) {
         <div className="text-base font-semibold text-[color:var(--ink)]">{title}</div>
       </div>
       <div className="mt-3 text-sm leading-6 text-[color:var(--ink)]">{children}</div>
+    </div>
+  );
+}
+
+function ExportConfigurationModal({
+  open,
+  onClose,
+  exportColumns,
+  selectedExportColumns,
+  onToggleColumn,
+  onSelectAll,
+  onResetDefault,
+  onClearAll,
+}) {
+  if (!open) {
+    return null;
+  }
+
+  const groupedColumns = groupExportColumns(exportColumns);
+
+  function renderGroup(title, description, columns) {
+    if (!columns.length) {
+      return null;
+    }
+
+    return (
+      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4">
+        <div className="text-sm font-semibold text-[color:var(--ink)]">{title}</div>
+        <div className="mt-1 text-sm text-[color:var(--muted)]">{description}</div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          {columns.map((column) => (
+            <label
+              key={column}
+              className="flex items-center gap-3 rounded-lg border border-[color:var(--line)] bg-white px-3 py-2.5 text-sm text-[color:var(--ink)]"
+            >
+              <input
+                type="checkbox"
+                checked={selectedExportColumns.includes(column)}
+                onChange={() => onToggleColumn(column)}
+              />
+              <span>{column}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(38,47,48,0.55)] px-4 py-8">
+      <div className="w-full max-w-5xl rounded-2xl border border-[color:var(--line)] bg-white shadow-[0_24px_80px_rgba(38,47,48,0.28)]">
+        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[color:var(--line)] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--brand)]">
+              Export Setup
+            </div>
+            <h3 className="mt-1 text-xl font-semibold text-[color:var(--ink)]">
+              How the export will be organized
+            </h3>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              The CSV starts with stitched timeline columns, then appends extra live-roster fields
+              and history-roster fields using `Live - ...` and `History - ...` prefixes.
+            </p>
+          </div>
+          <button
+            className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+            type="button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="grid gap-3 lg:grid-cols-3">
+            <Notice>
+              <strong>Stitched columns:</strong> the main timeline fields such as rep, manager,
+              team, start date, and end date.
+            </Notice>
+            <Notice>
+              <strong>Live extras:</strong> original live-roster attributes repeated across each
+              stitched row for that rep.
+            </Notice>
+            <Notice>
+              <strong>History extras:</strong> original history-roster attributes carried forward
+              from the change rows.
+            </Notice>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-[color:var(--muted)]">
+              {selectedExportColumns.length} of {exportColumns.length} columns selected for export.
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                type="button"
+                onClick={onSelectAll}
+              >
+                Select all
+              </button>
+              <button
+                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                type="button"
+                onClick={onResetDefault}
+              >
+                Reset default
+              </button>
+              <button
+                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                type="button"
+                onClick={onClearAll}
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+
+          {renderGroup(
+            'Stitched timeline columns',
+            'These are the primary columns most users keep in the export.',
+            groupedColumns.stitched,
+          )}
+          {renderGroup(
+            'Live roster columns',
+            'These came from the live roster file and follow each stitched row.',
+            groupedColumns.live,
+          )}
+          {renderGroup(
+            'History roster columns',
+            'These came from the history roster file and preserve row-level context.',
+            groupedColumns.history,
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1321,11 +1539,14 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   const [exportColumns, setExportColumns] = useState(PREVIEW_COLUMNS);
   const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
+  const [isExportConfigOpen, setIsExportConfigOpen] = useState(false);
   const [finalViewSearch, setFinalViewSearch] = useState('');
   const [finalViewSort, setFinalViewSort] = useState({
     column: 'Salesforce ID',
     direction: 'asc',
   });
+  const [issueSelections, setIssueSelections] = useState({});
+  const [selectedExportColumns, setSelectedExportColumns] = useState(PREVIEW_COLUMNS);
 
   const liveMissingMappings = useMemo(
     () => getMissingRequiredMappings(mappings.live, LIVE_SCHEMA),
@@ -1363,6 +1584,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     () => buildCleanupRecommendations(issues, processedRows, stats),
     [issues, processedRows, stats],
   );
+  const groupedIssues = useMemo(() => groupDataQualityIssues(issues), [issues]);
 
   const readyForMapping = Boolean(liveUpload.file && changeUpload.file);
   const readyToProcess =
@@ -1382,6 +1604,8 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
     setError('');
     setIssues([]);
     setProcessedRows([]);
+    setIssueSelections({});
+    setSelectedExportColumns(PREVIEW_COLUMNS);
     setStats({
       reps: 0,
       changeRows: 0,
@@ -1451,6 +1675,8 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   function handleMappingChange(kind, fieldKey, value) {
     setProcessedRows([]);
     setIssues([]);
+    setIssueSelections({});
+    setSelectedExportColumns(PREVIEW_COLUMNS);
     setStats({
       reps: 0,
       changeRows: 0,
@@ -1479,6 +1705,8 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
 
     setError('');
     setIssues([]);
+    setIssueSelections({});
+    setSelectedExportColumns(PREVIEW_COLUMNS);
     setIsProcessing(true);
 
     try {
@@ -1502,8 +1730,11 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         collapseSummary: output.collapseSummary,
       });
       setExportColumns(output.exportColumns);
+      setSelectedExportColumns(output.exportColumns);
     } catch (processingError) {
       setProcessedRows([]);
+      setIssueSelections({});
+      setSelectedExportColumns(PREVIEW_COLUMNS);
       setStats({
         reps: 0,
         changeRows: 0,
@@ -1534,6 +1765,18 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         direction: 'asc',
       };
     });
+  }
+
+  function handleToggleExportColumn(column) {
+    setSelectedExportColumns((current) =>
+      current.includes(column)
+        ? current.filter((item) => item !== column)
+        : exportColumns.filter((item) => item === column || current.includes(item)),
+    );
+  }
+
+  function handleResetDefaultExportColumns() {
+    setSelectedExportColumns(PREVIEW_COLUMNS.filter((column) => exportColumns.includes(column)));
   }
 
   return (
@@ -1633,7 +1876,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                 type="button"
                 onClick={() => setIsMappingOpen(true)}
               >
-                Open Mapping Popout
+                Field Mapping
               </button>
             ) : (
               <div className="text-sm text-[color:var(--muted)]">Waiting for files</div>
@@ -1718,24 +1961,14 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
           title="3. Process and Export"
           description="Generate the merged historical roster, review the first 50 rows, then export the full dataset."
           right={
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
-                type="button"
-                disabled={isProcessing || !readyToProcess}
-                onClick={handleProcess}
-              >
-                {isProcessing ? 'Processing...' : 'Process Data'}
-              </button>
-              <button
-                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] disabled:cursor-not-allowed disabled:text-[color:var(--muted)]"
-                type="button"
-                disabled={!processedRows.length}
-                onClick={() => downloadCsv(processedRows, exportColumns)}
-              >
-                Export CSV
-              </button>
-            </div>
+            <button
+              className="rounded-md bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
+              type="button"
+              disabled={isProcessing || !readyToProcess}
+              onClick={handleProcess}
+            >
+              {isProcessing ? 'Processing...' : 'Process Data'}
+            </button>
           }
         >
           <div className="space-y-4">
@@ -1759,10 +1992,73 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
             ) : null}
 
             {issues.length > 0 ? (
-              <Notice tone="warning">
-                {issues.length} data quality note{issues.length === 1 ? '' : 's'} found. Review the
-                details below before export.
-              </Notice>
+              <details className="overflow-hidden rounded-xl border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)]">
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[color:var(--ink)]">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      {issues.length} data quality note{issues.length === 1 ? '' : 's'} found
+                    </div>
+                    <div className="text-sm text-[color:var(--muted)]">
+                      Expand to review grouped issue types and row-level specifics
+                    </div>
+                  </div>
+                </summary>
+                <div className="border-t border-[color:var(--warn-line)] px-4 py-4">
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {groupedIssues.map((group) => {
+                      const selectedIndex = issueSelections[group.key] ?? 0;
+                      const selectedIssue = group.items[selectedIndex] ?? group.items[0];
+
+                      return (
+                        <div
+                          key={group.key}
+                          className="rounded-xl border border-[color:var(--warn-line)] bg-white p-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-semibold text-[color:var(--ink)]">
+                              {group.title}
+                            </div>
+                            <SourceTag tone="history">
+                              {group.items.length} match{group.items.length === 1 ? '' : 'es'}
+                            </SourceTag>
+                          </div>
+
+                          {group.items.length > 1 ? (
+                            <div className="mt-3 space-y-3">
+                              <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]">
+                                Specific row detail
+                              </label>
+                              <select
+                                className="w-full rounded-lg border border-[color:var(--line)] bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--brand)]"
+                                value={selectedIndex}
+                                onChange={(event) =>
+                                  setIssueSelections((current) => ({
+                                    ...current,
+                                    [group.key]: Number(event.target.value),
+                                  }))
+                                }
+                              >
+                                {group.items.map((item, index) => (
+                                  <option key={item} value={index}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-3 text-sm text-[color:var(--ink)]">
+                                {selectedIssue}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-3 text-sm text-[color:var(--ink)]">
+                              {selectedIssue}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </details>
             ) : null}
 
             <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
@@ -1817,19 +2113,6 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                 </table>
               </div>
             </div>
-
-            {issues.length > 0 ? (
-              <div className="space-y-2">
-                {issues.slice(0, 8).map((issue) => (
-                  <div
-                    key={issue}
-                    className="rounded-lg border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)] px-4 py-3 text-sm text-[color:var(--ink)]"
-                  >
-                    {issue}
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </div>
         </Section>
 
@@ -1838,6 +2121,25 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
           description="Search for a person and sort the full stitched output by any column."
           right={
             <div className="flex flex-col gap-2 sm:items-end">
+              {processedRows.length ? (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                    type="button"
+                    onClick={() => setIsExportConfigOpen(true)}
+                  >
+                    Export Setup
+                  </button>
+                  <button
+                    className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
+                    type="button"
+                    disabled={!processedRows.length || selectedExportColumns.length === 0}
+                    onClick={() => downloadCsv(processedRows, selectedExportColumns)}
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              ) : null}
               <div className="text-sm text-[color:var(--muted)]">
                 {processedRows.length
                   ? `${sortedFinalRows.length} of ${processedRows.length} rows shown`
@@ -1845,7 +2147,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
               </div>
               {processedRows.length ? (
                 <div className="text-sm text-[color:var(--muted)]">
-                  Search by full name or Salesforce ID
+                  Search by full name or Salesforce ID. Exporting {selectedExportColumns.length} columns.
                 </div>
               ) : null}
             </div>
@@ -1853,30 +2155,59 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         >
           {processedRows.length ? (
             <div className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-2">
-                {cleanupRecommendations.map((recommendation) => (
-                  <div
-                    key={recommendation.title}
-                    className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-[color:var(--ink)]">
-                        {recommendation.title}
-                      </div>
-                      <SourceTag tone={recommendation.impactedCount > 0 ? 'history' : 'output'}>
-                        {recommendation.impactedCount > 0
-                          ? `${recommendation.impactedCount} impacted`
-                          : 'No action needed'}
-                      </SourceTag>
-                    </div>
-                    <div className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-                      {recommendation.detail}
-                    </div>
-                    <div className="mt-3 text-sm text-[color:var(--ink)]">
-                      <strong>Recommended update:</strong> {recommendation.action}
-                    </div>
+              <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
+                <div className="border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                    Stitcher checks and cleanup summary
                   </div>
-                ))}
+                  <div className="mt-1 text-sm text-[color:var(--muted)]">
+                    This shows what the stitcher looked for, what it solved, and how often each
+                    pattern appeared in this run.
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
+                    <thead className="bg-white">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Cleaning Type
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Count
+                        </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Thing It Solved
+                        </th>
+                        <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Details
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[color:var(--line)] bg-white">
+                      {cleanupRecommendations.map((recommendation) => (
+                        <tr key={recommendation.title}>
+                          <td className="px-4 py-3 font-medium text-[color:var(--ink)]">
+                            {recommendation.title}
+                          </td>
+                          <td className="px-4 py-3 text-[color:var(--ink)]">
+                            <SourceTag tone={recommendation.impactedCount > 0 ? 'history' : 'output'}>
+                              {recommendation.impactedCount}
+                            </SourceTag>
+                          </td>
+                          <td className="px-4 py-3 text-[color:var(--ink)]">
+                            {recommendation.solved}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <InfoTooltip
+                              detail={recommendation.detail}
+                              example={recommendation.example}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1998,6 +2329,16 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
         </Section>
 
         <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
+        <ExportConfigurationModal
+          open={isExportConfigOpen}
+          onClose={() => setIsExportConfigOpen(false)}
+          exportColumns={exportColumns}
+          selectedExportColumns={selectedExportColumns}
+          onToggleColumn={handleToggleExportColumn}
+          onSelectAll={() => setSelectedExportColumns(exportColumns)}
+          onResetDefault={handleResetDefaultExportColumns}
+          onClearAll={() => setSelectedExportColumns([])}
+        />
         <MappingModal
           open={isMappingOpen}
           onClose={() => setIsMappingOpen(false)}
