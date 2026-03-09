@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import Papa from 'papaparse';
+import OnboardingWizard from './components/onboarding/OnboardingWizard.jsx';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_COLUMNS = [
@@ -832,7 +833,7 @@ function ExampleStoryModal({ open, onClose }) {
   );
 }
 
-export default function App() {
+function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
   const [liveUpload, setLiveUpload] = useState(EMPTY_UPLOAD);
   const [changeUpload, setChangeUpload] = useState(EMPTY_UPLOAD);
   const [mappings, setMappings] = useState({ live: {}, change: {} });
@@ -998,13 +999,30 @@ export default function App() {
                 Upload a live roster and a change log, map the required columns, then export one
                 historical roster file. The processing happens in the browser.
               </p>
+              {onboardingSession ? (
+                <div className="mt-3 rounded-xl border border-[color:var(--success-line)] bg-[color:var(--success-bg)] px-4 py-3 text-sm text-[color:var(--ink)]">
+                  Pre-ingestion onboarding completed for{' '}
+                  <strong>{onboardingSession.uploadedFile?.name ?? 'uploaded roster'}</strong>.{' '}
+                  {onboardingSession.validationResults.summary.requiredFieldsMapped}/5 required
+                  fields mapped before entering the main app.
+                </div>
+              ) : null}
             </div>
-            <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
-              {readyToProcess
-                ? 'Ready to process'
-                : readyForMapping
-                  ? 'Finish required mapping'
-                  : 'Upload both files'}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                {readyToProcess
+                  ? 'Ready to process'
+                  : readyForMapping
+                    ? 'Finish required mapping'
+                    : 'Upload both files'}
+              </div>
+              <button
+                className="rounded-md border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                type="button"
+                onClick={onRestartOnboarding}
+              >
+                Restart onboarding
+              </button>
             </div>
           </div>
         </header>
@@ -1225,5 +1243,20 @@ export default function App() {
         <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
       </div>
     </main>
+  );
+}
+
+export default function App() {
+  const [onboardingSession, setOnboardingSession] = useState(null);
+
+  if (!onboardingSession) {
+    return <OnboardingWizard onComplete={setOnboardingSession} />;
+  }
+
+  return (
+    <HistoricalRosterApp
+      onboardingSession={onboardingSession}
+      onRestartOnboarding={() => setOnboardingSession(null)}
+    />
   );
 }
