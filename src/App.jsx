@@ -2086,6 +2086,13 @@ function HistoricalRosterApp() {
                   <button
                     className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
                     type="button"
+                    onClick={() => setIsExampleOpen(true)}
+                  >
+                    See Example
+                  </button>
+                  <button
+                    className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                    type="button"
                     onClick={() => setIsExportConfigOpen(true)}
                   >
                     Export Setup
@@ -2268,16 +2275,6 @@ function HistoricalRosterApp() {
             <Notice>Build the roster first to review the final results and export choices.</Notice>
           )}
         </Section>
-
-        <div className="flex justify-end">
-          <button
-            className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
-            type="button"
-            onClick={() => setIsExampleOpen(true)}
-          >
-            See Example
-          </button>
-        </div>
 
         <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
         <ExportConfigurationModal
