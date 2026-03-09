@@ -74,90 +74,222 @@ const EMPTY_UPLOAD = {
   rows: [],
 };
 
-const EXAMPLE_RECORD = {
-  liveRoster: {
-    SFDC_ID: '0058A00000EXAMPLE',
-    Full_Name: 'Avery Morgan',
-    Hire_Date: '2022-01-10',
-    Termination_Date: '',
-    Team: 'Mid-Market',
-    Manager: 'Taylor Chen',
-    Segment: 'MM NBS',
-    Function_Origin: 'Direct AM',
-  },
-  changeLog: [
-    {
-      Change_Date: '2022-01-10',
-      Team: 'SMB',
-      Manager: 'Jamie Lee',
-      Segment: 'SMB NA',
-      Function_Origin: 'SDR',
-      note: 'Opening state at hire',
-    },
-    {
-      Change_Date: '2023-06-01',
-      Team: 'Enterprise',
-      Manager: 'Jamie Lee',
-      Segment: 'Enterprise',
+const EXAMPLE_RECORDS = [
+  {
+    id: 'manager-function-change',
+    label: 'Manager + function change',
+    liveRoster: {
+      SFDC_ID: '0058A00000EXAMPLE',
+      Full_Name: 'Avery Morgan',
+      Hire_Date: '2022-01-10',
+      Termination_Date: '',
+      Team: 'Mid-Market',
+      Manager: 'Taylor Chen',
+      Segment: 'MM NBS',
       Function_Origin: 'Direct AM',
-      note: 'Team and function move',
     },
-    {
-      Change_Date: '2024-02-15',
-      Team: '',
-      Manager: 'Taylor Chen',
-      Segment: '',
-      Function_Origin: '',
-      note: 'Manager change',
-    },
-    {
-      Change_Date: '2024-02-15',
-      Team: 'Mid-Market',
-      Manager: '',
-      Segment: 'MM NBS',
-      Function_Origin: '',
-      note: 'Same-day team change',
-    },
-  ],
-  output: [
-    {
-      'Salesforce ID': '0058A00000EXAMPLE',
-      'Full Name': 'Avery Morgan',
-      Team: 'SMB',
-      Manager: 'Jamie Lee',
-      Segment: 'SMB NA',
-      'Function Origin': 'SDR',
-      'Start Date': '2022-01-10',
-      'End Date': '2023-05-31',
-      Is_Active: 'false',
-      why: 'Opened from the first change-log row and closed the day before the next change.',
-    },
-    {
-      'Salesforce ID': '0058A00000EXAMPLE',
-      'Full Name': 'Avery Morgan',
+    shortVersion:
+      'The live roster shows where Avery is now. The history roster shows Avery started elsewhere, changed function, and later changed manager.',
+    liveSummary:
+      'Avery Morgan is in Mid-Market, reports to Taylor Chen, and works as Direct AM.',
+    historySummary:
+      'Avery started in SMB as an SDR, moved to Enterprise, then later changed manager and team.',
+    exportSummary:
+      'The final file gives one row for each chapter of Avery’s journey.',
+    beforeText:
+      'By itself, this looks like Avery was always in this team and always had this manager.',
+    changeStory: [
+      '2022-01-10: Avery starts in SMB as an SDR under Jamie Lee.',
+      '2023-06-01: Avery moves to Enterprise and changes function to Direct AM.',
+      '2024-02-15: Avery changes manager to Taylor Chen and moves to Mid-Market.',
+    ],
+    lessonNotes: [
+      'Manager changes come from the history roster, not the live roster snapshot.',
+      'Function changes create a new chapter even when the person stays employed.',
+      'Same-day manager and team updates collapse into one clean final row.',
+    ],
+    output: [
+      {
+        'Start Date': '2022-01-10',
+        'End Date': '2023-05-31',
+        Team: 'SMB',
+        Manager: 'Jamie Lee',
+        'Function Origin': 'SDR',
+      },
+      {
+        'Start Date': '2023-06-01',
+        'End Date': '2024-02-14',
+        Team: 'Enterprise',
+        Manager: 'Jamie Lee',
+        'Function Origin': 'Direct AM',
+      },
+      {
+        'Start Date': '2024-02-15',
+        'End Date': '',
+        Team: 'Mid-Market',
+        Manager: 'Taylor Chen',
+        'Function Origin': 'Direct AM',
+      },
+    ],
+  },
+  {
+    id: 'termination-example',
+    label: 'Termination closes the final row',
+    liveRoster: {
+      SFDC_ID: '0058A00000TERM001',
+      Full_Name: 'Marcus Hale',
+      Hire_Date: '2021-03-08',
+      Termination_Date: '2024-09-30',
       Team: 'Enterprise',
-      Manager: 'Jamie Lee',
+      Manager: 'Dana Ortiz',
       Segment: 'Enterprise',
-      'Function Origin': 'Direct AM',
-      'Start Date': '2023-06-01',
-      'End Date': '2024-02-14',
-      Is_Active: 'false',
-      why: 'The history file shows both a team move and a function change, which the live roster alone cannot show.',
+      Function_Origin: 'Account Executive',
     },
-    {
-      'Salesforce ID': '0058A00000EXAMPLE',
-      'Full Name': 'Avery Morgan',
-      Team: 'Mid-Market',
-      Manager: 'Taylor Chen',
-      Segment: 'MM NBS',
-      'Function Origin': 'Direct AM',
-      'Start Date': '2024-02-15',
-      'End Date': '',
-      Is_Active: 'true',
-      why: 'Same-day change rows are consolidated, then the final open row stays active because the live roster has no termination date.',
+    shortVersion:
+      'The live roster gives Marcus’s last known state and the termination date. The history roster fills in the earlier chapters.',
+    liveSummary:
+      'Marcus ended in Enterprise under Dana Ortiz as an Account Executive, with a termination date of 2024-09-30.',
+    historySummary:
+      'Marcus started in SMB, later moved to Mid-Market, and finally moved into Enterprise before leaving.',
+    exportSummary:
+      'Because the live roster includes a termination date, the last chapter closes instead of staying open.',
+    beforeText:
+      'If you only saw the live roster, you would miss Marcus’s earlier SMB and Mid-Market time.',
+    changeStory: [
+      '2021-03-08: Marcus starts in SMB under Elena Park.',
+      '2022-05-01: Marcus moves to Mid-Market under Elena Park.',
+      '2023-11-15: Marcus moves to Enterprise under Dana Ortiz.',
+      '2024-09-30: The live roster termination date closes the final chapter.',
+    ],
+    lessonNotes: [
+      'A termination date from the live roster closes the final row.',
+      'The history roster still controls when the earlier chapters begin and end.',
+      'The export shows a finished timeline instead of an active row.',
+    ],
+    output: [
+      {
+        'Start Date': '2021-03-08',
+        'End Date': '2022-04-30',
+        Team: 'SMB',
+        Manager: 'Elena Park',
+        'Function Origin': 'Account Executive',
+      },
+      {
+        'Start Date': '2022-05-01',
+        'End Date': '2023-11-14',
+        Team: 'Mid-Market',
+        Manager: 'Elena Park',
+        'Function Origin': 'Account Executive',
+      },
+      {
+        'Start Date': '2023-11-15',
+        'End Date': '2024-09-30',
+        Team: 'Enterprise',
+        Manager: 'Dana Ortiz',
+        'Function Origin': 'Account Executive',
+      },
+    ],
+  },
+  {
+    id: 'team-only-change',
+    label: 'Team move without manager change',
+    liveRoster: {
+      SFDC_ID: '0058A00000TEAM001',
+      Full_Name: 'Priya Nair',
+      Hire_Date: '2022-04-04',
+      Termination_Date: '',
+      Team: 'Agency',
+      Manager: 'Scott Rivera',
+      Segment: 'Agency',
+      Function_Origin: 'Campaign Manager',
     },
-  ],
-};
+    shortVersion:
+      'Sometimes the manager stays the same and only the team changes. The stitcher still creates a new row because the rep moved chapters.',
+    liveSummary:
+      'Priya is currently in Agency under Scott Rivera as a Campaign Manager.',
+    historySummary:
+      'Priya started in Onboarding, then moved to Agency while keeping the same manager.',
+    exportSummary:
+      'The export still creates a new row because team changes matter, even when the manager stays the same.',
+    beforeText:
+      'Without history, it looks like Priya was always in Agency under Scott Rivera.',
+    changeStory: [
+      '2022-04-04: Priya starts in Onboarding under Scott Rivera.',
+      '2023-01-09: Priya moves to Agency and keeps the same manager.',
+    ],
+    lessonNotes: [
+      'A team change creates a new row even if the manager does not change.',
+      'The live roster only tells you the current team, not the earlier one.',
+      'The export keeps the timeline simple: one row before the move, one row after.',
+    ],
+    output: [
+      {
+        'Start Date': '2022-04-04',
+        'End Date': '2023-01-08',
+        Team: 'Onboarding',
+        Manager: 'Scott Rivera',
+        'Function Origin': 'Campaign Manager',
+      },
+      {
+        'Start Date': '2023-01-09',
+        'End Date': '',
+        Team: 'Agency',
+        Manager: 'Scott Rivera',
+        'Function Origin': 'Campaign Manager',
+      },
+    ],
+  },
+  {
+    id: 'same-day-cleanup',
+    label: 'Same-day cleanup',
+    liveRoster: {
+      SFDC_ID: '0058A00000SAMEDAY',
+      Full_Name: 'Leo Bennett',
+      Hire_Date: '2023-02-13',
+      Termination_Date: '',
+      Team: 'Enterprise',
+      Manager: 'Maya Brooks',
+      Segment: 'Enterprise',
+      Function_Origin: 'Sales Specialist',
+    },
+    shortVersion:
+      'The history roster can contain multiple updates on the same day. The stitcher combines them into one final state for that day.',
+    liveSummary:
+      'Leo is now in Enterprise under Maya Brooks as a Sales Specialist.',
+    historySummary:
+      'On one day, Leo had both a manager update and a team update. The stitcher combines those two rows.',
+    exportSummary:
+      'Instead of creating overlapping rows for the same day, the final export keeps one clean chapter starting on that date.',
+    beforeText:
+      'The live roster does not tell you that two separate changes happened on the same day.',
+    changeStory: [
+      '2023-02-13: Leo starts in SMB under Robin West.',
+      '2024-07-01: Leo gets a new manager, Maya Brooks.',
+      '2024-07-01: Leo also moves to Enterprise on the same day.',
+    ],
+    lessonNotes: [
+      'Two history rows can happen on the same date.',
+      'The stitcher closes the old chapter once and opens one final combined chapter.',
+      'This prevents duplicate overlapping rows in the export.',
+    ],
+    output: [
+      {
+        'Start Date': '2023-02-13',
+        'End Date': '2024-06-30',
+        Team: 'SMB',
+        Manager: 'Robin West',
+        'Function Origin': 'Sales Specialist',
+      },
+      {
+        'Start Date': '2024-07-01',
+        'End Date': '',
+        Team: 'Enterprise',
+        Manager: 'Maya Brooks',
+        'Function Origin': 'Sales Specialist',
+      },
+    ],
+  },
+];
 
 function normalizeHeader(value) {
   return String(value ?? '')
@@ -741,8 +873,25 @@ function StoryCard({ step, title, children }) {
 }
 
 function ExampleStoryModal({ open, onClose }) {
+  const [exampleIndex, setExampleIndex] = useState(0);
+
   if (!open) {
     return null;
+  }
+
+  const example = EXAMPLE_RECORDS[exampleIndex];
+  const isSingleExample = EXAMPLE_RECORDS.length <= 1;
+
+  function showPreviousExample() {
+    setExampleIndex((current) =>
+      current === 0 ? EXAMPLE_RECORDS.length - 1 : current - 1,
+    );
+  }
+
+  function showNextExample() {
+    setExampleIndex((current) =>
+      current === EXAMPLE_RECORDS.length - 1 ? 0 : current + 1,
+    );
   }
 
   return (
@@ -756,27 +905,50 @@ function ExampleStoryModal({ open, onClose }) {
             <h3 className="mt-1 text-xl font-semibold text-[color:var(--ink)]">
               How the stitched roster shows the true story of one rep
             </h3>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <SourceTag tone="output">{example.label}</SourceTag>
+              <span className="text-sm text-[color:var(--muted)]">
+                Example {exampleIndex + 1} of {EXAMPLE_RECORDS.length}
+              </span>
+            </div>
           </div>
-          <button
-            className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] disabled:cursor-not-allowed disabled:text-[color:var(--muted)]"
+              type="button"
+              onClick={showPreviousExample}
+              disabled={isSingleExample}
+              aria-label="Show previous example"
+            >
+              ←
+            </button>
+            <button
+              className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] disabled:cursor-not-allowed disabled:text-[color:var(--muted)]"
+              type="button"
+              onClick={showNextExample}
+              disabled={isSingleExample}
+              aria-label="Show next example"
+            >
+              →
+            </button>
+            <button
+              className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="space-y-6 px-5 py-5">
           <Notice>
-            <strong>Short version:</strong> the live roster shows where Avery is now. The history
-            file shows where Avery used to be. The stitched export puts those moments in order so
-            you can see the full story.
+            <strong>Short version:</strong> {example.shortVersion}
           </Notice>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <StoryCard step="1" title="What the live roster says now">
-              Avery Morgan is in <strong>Mid-Market</strong>, reports to{' '}
-              <strong>Taylor Chen</strong>, and works as <strong>Direct AM</strong>.
+              {example.liveSummary}
               <div className="mt-3 flex flex-wrap gap-2">
                 <SourceTag>Comes from roster</SourceTag>
                 <SourceTag>Current snapshot</SourceTag>
@@ -784,17 +956,15 @@ function ExampleStoryModal({ open, onClose }) {
             </StoryCard>
 
             <StoryCard step="2" title="What the history file adds">
-              Avery started in <strong>SMB</strong> as an <strong>SDR</strong>, then moved to{' '}
-              <strong>Enterprise</strong>, then later changed to a new manager and team.
+              {example.historySummary}
               <div className="mt-3 flex flex-wrap gap-2">
-                  <SourceTag tone="history">Comes from history roster</SourceTag>
+                <SourceTag tone="history">Comes from history roster</SourceTag>
                 <SourceTag tone="history">Shows past changes</SourceTag>
               </div>
             </StoryCard>
 
             <StoryCard step="3" title="What the final export tells you">
-              The final file gives you <strong>one row for each chapter</strong> of Avery&apos;s
-              journey, with a clear start date and end date for each chapter.
+              {example.exportSummary}
               <div className="mt-3 flex flex-wrap gap-2">
                 <SourceTag tone="output">Final stitched truth</SourceTag>
                 <SourceTag tone="output">Easy to read</SourceTag>
@@ -810,11 +980,10 @@ function ExampleStoryModal({ open, onClose }) {
               </div>
               <ExampleTable
                 columns={['Full_Name', 'Team', 'Manager', 'Function_Origin']}
-                rows={[EXAMPLE_RECORD.liveRoster]}
+                rows={[example.liveRoster]}
               />
               <div className="text-sm leading-6 text-[color:var(--muted)]">
-                By itself, this looks like Avery was always in this team and always had this
-                manager.
+                {example.beforeText}
               </div>
             </div>
 
@@ -825,17 +994,15 @@ function ExampleStoryModal({ open, onClose }) {
               </div>
               <div className="rounded-xl border border-[color:var(--line)] bg-white">
                 <div className="divide-y divide-[color:var(--line)]">
-                  <div className="px-4 py-3 text-sm text-[color:var(--ink)]">
-                    <strong>2022-01-10:</strong> Avery starts in SMB as an SDR under Jamie Lee.
-                  </div>
-                  <div className="px-4 py-3 text-sm text-[color:var(--ink)]">
-                    <strong>2023-06-01:</strong> Avery moves to Enterprise and changes function to
-                    Direct AM.
-                  </div>
-                  <div className="px-4 py-3 text-sm text-[color:var(--ink)]">
-                    <strong>2024-02-15:</strong> Avery changes manager to Taylor Chen and moves to
-                    Mid-Market.
-                  </div>
+                  {example.changeStory.map((entry) => {
+                    const [datePart, detailPart] = entry.split(': ');
+
+                    return (
+                      <div key={entry} className="px-4 py-3 text-sm text-[color:var(--ink)]">
+                        <strong>{datePart}:</strong> {detailPart}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -848,12 +1015,42 @@ function ExampleStoryModal({ open, onClose }) {
             </div>
             <ExampleTable
               columns={['Start Date', 'End Date', 'Team', 'Manager', 'Function Origin']}
-              rows={EXAMPLE_RECORD.output}
+              rows={example.output}
               tone="output"
             />
             <div className="text-sm leading-6 text-[color:var(--muted)]">
               This is the point of the stitched roster: a short, clear timeline showing when the rep
               was in each team, under each manager, and in each function.
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            {example.lessonNotes.map((note, index) => (
+              <Notice key={note}>
+                <strong>Lesson {index + 1}:</strong> {note}
+              </Notice>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
+            <div className="text-sm text-[color:var(--muted)]">
+              Use the arrows to compare different stitching cases: manager changes, team moves,
+              terminations, and same-day cleanup.
+            </div>
+            <div className="flex items-center gap-2">
+              {EXAMPLE_RECORDS.map((record, index) => (
+                <button
+                  key={record.id}
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    index === exampleIndex
+                      ? 'bg-[color:var(--brand)]'
+                      : 'bg-[color:var(--line)]'
+                  }`}
+                  type="button"
+                  onClick={() => setExampleIndex(index)}
+                  aria-label={`Show ${record.label} example`}
+                />
+              ))}
             </div>
           </div>
         </div>
