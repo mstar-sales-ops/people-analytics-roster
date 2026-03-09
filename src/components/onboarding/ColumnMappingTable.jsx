@@ -18,6 +18,23 @@ export default function ColumnMappingTable({
   columnFindings,
   onMappingChange,
 }) {
+  const sortedHeaders = [...headers].sort((left, right) => {
+    const rank = {
+      review: 0,
+      high: 1,
+      missing: 2,
+    };
+
+    const leftConfidence = suggestions[left]?.confidence ?? 'missing';
+    const rightConfidence = suggestions[right]?.confidence ?? 'missing';
+
+    if (rank[leftConfidence] !== rank[rightConfidence]) {
+      return rank[leftConfidence] - rank[rightConfidence];
+    }
+
+    return left.localeCompare(right);
+  });
+
   const selectedFields = Object.entries(confirmedMappings).reduce((current, [header, fieldKey]) => {
     if (fieldKey && fieldKey !== IGNORE_FIELD) {
       current[fieldKey] = header;
@@ -52,7 +69,7 @@ export default function ColumnMappingTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[color:var(--line)] bg-white">
-            {headers.map((header) => {
+            {sortedHeaders.map((header) => {
               const suggestion = suggestions[header];
               const mappedField = confirmedMappings[header] ?? '';
               const findings = columnFindings[header] ?? [];

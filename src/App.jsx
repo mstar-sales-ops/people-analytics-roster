@@ -380,7 +380,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
     const changeDate = parseDateInput(row.Change_Date);
 
     if (!salesforceId || !changeDate) {
-      issues.push(`Change Log row ${index + 2}: missing SFDC_ID or Change_Date.`);
+      issues.push(`History Roster row ${index + 2}: missing SFDC_ID or Change_Date.`);
       return;
     }
 
@@ -787,7 +787,7 @@ function ExampleStoryModal({ open, onClose }) {
               Avery started in <strong>SMB</strong> as an <strong>SDR</strong>, then moved to{' '}
               <strong>Enterprise</strong>, then later changed to a new manager and team.
               <div className="mt-3 flex flex-wrap gap-2">
-                <SourceTag tone="history">Comes from change log</SourceTag>
+                  <SourceTag tone="history">Comes from history roster</SourceTag>
                 <SourceTag tone="history">Shows past changes</SourceTag>
               </div>
             </StoryCard>
@@ -1025,7 +1025,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                 Historical Roster Builder
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
-                Upload a live roster and a change log, map the required columns, then export one
+                Upload a live roster and a history roster, map the required columns, then export one
                 historical roster file. The processing happens in the browser.
               </p>
               {onboardingSession ? (
@@ -1077,7 +1077,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
 
         <Section
           title="1. Upload Files"
-          description="Load the live roster and the SFDC change log."
+          description="Load the live roster and the history roster."
         >
           <div className="grid gap-4 lg:grid-cols-2">
             <UploadCard
@@ -1089,7 +1089,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
               onChange={(file) => handleUpload('live', file)}
             />
             <UploadCard
-              label="SFDC Change Log"
+              label="History Roster"
               helperText="Multiple rows per rep. This provides the historical changes."
               file={changeUpload.file}
               rowCount={changeUpload.rows.length}
@@ -1133,7 +1133,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
                   onChange={(fieldKey, value) => handleMappingChange('live', fieldKey, value)}
                 />
                 <MappingPanel
-                  title="Change Log Schema"
+                  title="History Roster Schema"
                   schema={CHANGE_SCHEMA}
                   headers={changeUpload.headers}
                   mapping={mappings.change}
@@ -1238,7 +1238,7 @@ function HistoricalRosterApp({ onboardingSession, onRestartOnboarding }) {
 
         <Section
           title="Example Output"
-          description="Open a walkthrough that compares the snapshot view from the live roster against the fuller story revealed by the historical change file."
+          description="Open a walkthrough that compares the snapshot view from the live roster against the fuller story revealed by the history roster."
           right={
             <button
               className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)]"
