@@ -638,12 +638,31 @@ function getInternalValueForLiveField(row, fieldKey) {
   return fieldMap[fieldKey] ?? '';
 }
 
+function getOutputHeaderLabel(fieldKey, header) {
+  if (!header) {
+    return '';
+  }
+
+  if (fieldKey === 'Hire_Date') {
+    return 'Start Date';
+  }
+
+  if (fieldKey === 'Termination_Date') {
+    return 'End Date';
+  }
+
+  return header;
+}
+
 function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) {
-  const matchedHeaders = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
+  const matchedHeaders = LIVE_SCHEMA.map((field) =>
+    getOutputHeaderLabel(field.key, liveMapping[field.key]),
+  ).filter(Boolean);
+  const rawMatchedHeaders = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
   const reviewColumns = [
     ...matchedHeaders,
     'Current_Record',
-    ...liveHeaders.filter((header) => !matchedHeaders.includes(header)),
+    ...liveHeaders.filter((header) => !rawMatchedHeaders.includes(header)),
   ];
   const liveHeaderKeys = new Set(liveHeaders.map((header) => normalizeHeader(header)));
   const historyOnlyColumns = historyHeaders.filter(
@@ -653,7 +672,7 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) 
   const headerToField = new Map(
     Object.entries(liveMapping)
       .filter(([, header]) => header)
-      .map(([fieldKey, header]) => [header, fieldKey]),
+      .map(([fieldKey, header]) => [getOutputHeaderLabel(fieldKey, header), fieldKey]),
   );
 
   return {
@@ -1070,7 +1089,9 @@ function groupDataQualityIssues(issues) {
 }
 
 function groupExportColumns(columns, liveMapping, historyOnlyColumns) {
-  const matchedColumns = LIVE_SCHEMA.map((field) => liveMapping[field.key]).filter(Boolean);
+  const matchedColumns = LIVE_SCHEMA.map((field) =>
+    getOutputHeaderLabel(field.key, liveMapping[field.key]),
+  ).filter(Boolean);
 
   return {
     matched: matchedColumns,
