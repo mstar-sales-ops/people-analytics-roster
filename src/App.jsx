@@ -668,7 +668,11 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) 
   const historyOnlyColumns = historyHeaders.filter(
     (header) => !liveHeaderKeys.has(normalizeHeader(header)),
   );
-  const orderedHeaders = [...reviewColumns, ...historyOnlyColumns];
+  const exportColumns = [
+    'Current_Record',
+    ...reviewColumns.filter((header) => header !== 'Current_Record'),
+    ...historyOnlyColumns,
+  ];
   const headerToField = new Map(
     Object.entries(liveMapping)
       .filter(([, header]) => header)
@@ -676,11 +680,11 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) 
   );
 
   return {
-    columns: orderedHeaders,
+    columns: exportColumns,
     reviewColumns,
     historyOnlyColumns,
     rows: rows.map((row) =>
-      orderedHeaders.reduce((current, header) => {
+      exportColumns.reduce((current, header) => {
         if (header === 'Current_Record') {
           current[header] = row.Current_Record;
           return current;
@@ -1488,8 +1492,9 @@ function ExportConfigurationModal({
               How the export will be organized
             </h3>
             <p className="mt-1 text-sm text-[color:var(--muted)]">
-              The CSV follows the live roster. First come the matched live-roster columns that the
-              stitcher updates, then the remaining live-roster columns in their original order.
+              The CSV starts with <strong>Current_Record</strong> so downstream dashboards can
+              default to the current view first. After that come the matched live-roster columns,
+              then the remaining live-roster columns in their original order.
             </p>
           </div>
           <button
@@ -2116,7 +2121,11 @@ function HistoricalRosterApp() {
       });
       setExportColumns(liveOrderedOutput.columns);
       setHistoryOnlyExportColumns(liveOrderedOutput.historyOnlyColumns);
-      setSelectedExportColumns(liveOrderedOutput.reviewColumns);
+      setSelectedExportColumns(
+        liveOrderedOutput.columns.filter(
+          (column) => !liveOrderedOutput.historyOnlyColumns.includes(column),
+        ),
+      );
     } catch (processingError) {
       setProcessedRows([]);
       setReviewRows([]);
@@ -2165,7 +2174,9 @@ function HistoricalRosterApp() {
   }
 
   function handleResetDefaultExportColumns() {
-    setSelectedExportColumns(reviewColumns);
+    setSelectedExportColumns(
+      exportColumns.filter((column) => !historyOnlyExportColumns.includes(column)),
+    );
   }
 
   return (
