@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -92,6 +92,49 @@ const EMPTY_UPLOAD = {
 
 const EXAMPLE_RECORDS = [
   {
+    id: 'adjacent-identical-collapse',
+    label: 'Adjacent identical era collapse',
+    liveRoster: {
+      SFDC_ID: '0058A00000MERGE01',
+      Full_Name: 'Alex Thomas',
+      Hire_Date: '2023-07-10',
+      Termination_Date: '',
+      Team: 'ACP4',
+      Manager: 'Jessica Scholl',
+      Segment: 'SMB NA',
+      Function_Origin: 'Agency CP',
+    },
+    shortVersion:
+      'Sometimes the history file creates two back-to-back rows that tell the same story. The stitcher merges them into one continuous chapter.',
+    liveSummary:
+      'Alex is currently in ACP4 under Jessica Scholl in Agency CP.',
+    historySummary:
+      'The history file can produce repeated state rows where only the date boundary changes and nothing else changes.',
+    exportSummary:
+      'The final export removes the duplicate break and keeps one continuous row for the same assignment state.',
+    beforeText:
+      'Without cleanup, the timeline can show extra rows even though the rep did not really change teams, manager, segment, or function.',
+    changeStory: [
+      '2023-07-10: Alex starts in ACP4 under Jessica Scholl.',
+      '2023-07-11: Another history row repeats the exact same state.',
+      'The stitcher merges those two rows because the dates are continuous and the state is identical.',
+    ],
+    lessonNotes: [
+      'This is cleanup, not a new assignment chapter.',
+      'The stitcher keeps the full date continuity and removes the redundant break.',
+      'This makes the export easier to use in downstream dashboards.',
+    ],
+    output: [
+      {
+        'Start Date': '2023-07-10',
+        'End Date': '',
+        Team: 'ACP4',
+        Manager: 'Jessica Scholl',
+        'Function Origin': 'Agency CP',
+      },
+    ],
+  },
+  {
     id: 'manager-function-change',
     label: 'Manager + function change',
     liveRoster: {
@@ -145,6 +188,49 @@ const EXAMPLE_RECORDS = [
         Team: 'Mid-Market',
         Manager: 'Taylor Chen',
         'Function Origin': 'Direct AM',
+      },
+    ],
+  },
+  {
+    id: 'missing-keys',
+    label: 'Missing identifiers or dates',
+    liveRoster: {
+      SFDC_ID: '0058A00000MISS01',
+      Full_Name: 'Jordan West',
+      Hire_Date: '2023-03-01',
+      Termination_Date: '',
+      Team: 'SMB',
+      Manager: 'Pat Rivera',
+      Segment: 'SMB NA',
+      Function_Origin: 'AE',
+    },
+    shortVersion:
+      'Rows missing the person ID or the change date cannot be stitched safely, so the tool flags them instead of guessing.',
+    liveSummary:
+      'Jordan is in SMB under Pat Rivera as an AE.',
+    historySummary:
+      'One history row is missing Salesforce ID. Another is missing Change Date. Those rows cannot be placed in the timeline.',
+    exportSummary:
+      'The export only uses the valid rows and surfaces the missing-key problem as a data-quality issue.',
+    beforeText:
+      'If the file is missing a stable key or date, the tool cannot tell whose row it is or when it belongs.',
+    changeStory: [
+      '2023-03-01: Jordan starts in SMB under Pat Rivera.',
+      'One later row is missing Salesforce ID.',
+      'Another later row is missing Change Date, so both are skipped and flagged.',
+    ],
+    lessonNotes: [
+      'The stitcher never guesses missing identifiers or dates.',
+      'Bad rows are flagged so you can fix them upstream.',
+      'Valid rows still process normally for that person.',
+    ],
+    output: [
+      {
+        'Start Date': '2023-03-01',
+        'End Date': '',
+        Team: 'SMB',
+        Manager: 'Pat Rivera',
+        'Function Origin': 'AE',
       },
     ],
   },
@@ -207,6 +293,49 @@ const EXAMPLE_RECORDS = [
     ],
   },
   {
+    id: 'invalid-dates',
+    label: 'Invalid date values',
+    liveRoster: {
+      SFDC_ID: '0058A00000DATE01',
+      Full_Name: 'Nina Ortiz',
+      Hire_Date: '2023-05-15',
+      Termination_Date: '',
+      Team: 'Mid-Market',
+      Manager: 'Evan Cole',
+      Segment: 'MM',
+      Function_Origin: 'Account Manager',
+    },
+    shortVersion:
+      'If a date is malformed, the tool flags it before it can create a broken timeline.',
+    liveSummary:
+      'Nina is in Mid-Market under Evan Cole as an Account Manager.',
+    historySummary:
+      'A history row has a bad date value, so the stitcher will not trust it.',
+    exportSummary:
+      'Only rows with usable dates can create timeline chapters. Invalid dates are called out for cleanup.',
+    beforeText:
+      'A broken date can put a row in the wrong place or make the whole timeline unreliable.',
+    changeStory: [
+      '2023-05-15: Nina starts in Mid-Market under Evan Cole.',
+      'One later row has an invalid date like 2024-99-99.',
+      'That row is flagged instead of being stitched into the timeline.',
+    ],
+    lessonNotes: [
+      'Date trust matters because every stitched chapter depends on a clean effective date.',
+      'The tool protects the timeline by skipping invalid dates.',
+      'You fix the source date, then rerun the stitch.',
+    ],
+    output: [
+      {
+        'Start Date': '2023-05-15',
+        'End Date': '',
+        Team: 'Mid-Market',
+        Manager: 'Evan Cole',
+        'Function Origin': 'Account Manager',
+      },
+    ],
+  },
+  {
     id: 'team-only-change',
     label: 'Team move without manager change',
     liveRoster: {
@@ -252,6 +381,49 @@ const EXAMPLE_RECORDS = [
         Team: 'Agency',
         Manager: 'Scott Rivera',
         'Function Origin': 'Campaign Manager',
+      },
+    ],
+  },
+  {
+    id: 'duplicate-live-id',
+    label: 'Duplicate live roster ID',
+    liveRoster: {
+      SFDC_ID: '0058A00000DUP001',
+      Full_Name: 'Mira Patel',
+      Hire_Date: '2022-09-12',
+      Termination_Date: '',
+      Team: 'Onboarding',
+      Manager: 'Chris Long',
+      Segment: 'SMB NA',
+      Function_Origin: 'CSM',
+    },
+    shortVersion:
+      'If the live roster contains the same Salesforce ID twice, the tool flags the conflict because the anchor record is ambiguous.',
+    liveSummary:
+      'Mira appears in the live roster, but the same Salesforce ID appears on more than one live row.',
+    historySummary:
+      'The history file may be fine, but the anchor roster still has to identify one current person record cleanly.',
+    exportSummary:
+      'The export warns you that the live roster should be deduplicated before you trust the result.',
+    beforeText:
+      'The live roster is the anchor table, so duplicate IDs create uncertainty about the true current state.',
+    changeStory: [
+      '2022-09-12: Mira starts in Onboarding under Chris Long.',
+      'The live roster later contains a duplicate Salesforce ID row for Mira.',
+      'The stitcher flags the duplicate instead of pretending both anchors are equally valid.',
+    ],
+    lessonNotes: [
+      'The live roster drives who is in scope.',
+      'Duplicate anchor IDs should be fixed upstream.',
+      'This keeps the final roster trustworthy.',
+    ],
+    output: [
+      {
+        'Start Date': '2022-09-12',
+        'End Date': '',
+        Team: 'Onboarding',
+        Manager: 'Chris Long',
+        'Function Origin': 'CSM',
       },
     ],
   },
@@ -302,6 +474,49 @@ const EXAMPLE_RECORDS = [
         Team: 'Enterprise',
         Manager: 'Maya Brooks',
         'Function Origin': 'Sales Specialist',
+      },
+    ],
+  },
+  {
+    id: 'blank-manager-team',
+    label: 'Blank stitched manager or team',
+    liveRoster: {
+      SFDC_ID: '0058A00000BLANK1',
+      Full_Name: 'Riley Dunn',
+      Hire_Date: '2024-01-08',
+      Termination_Date: '',
+      Team: 'Agency',
+      Manager: '',
+      Segment: 'Agency',
+      Function_Origin: 'Campaign Manager',
+    },
+    shortVersion:
+      'If core assignment fields still end up blank, the tool calls that out so the row can be fixed upstream.',
+    liveSummary:
+      'Riley is in Agency, but the manager value is missing.',
+    historySummary:
+      'The history file did not fill the missing manager value either, so the stitched row still has a blank core field.',
+    exportSummary:
+      'The export keeps the row, but flags the missing manager or team so it can be cleaned before reporting.',
+    beforeText:
+      'A stitched row can still be incomplete if the source rosters never provide the missing team or manager.',
+    changeStory: [
+      '2024-01-08: Riley starts in Agency.',
+      'The source data never provides a usable manager value.',
+      'The final row is included, but flagged because a core assignment field is blank.',
+    ],
+    lessonNotes: [
+      'The tool preserves the row instead of silently dropping the person.',
+      'Missing manager or team values should be fixed in the source roster.',
+      'This warning helps with QC before export.',
+    ],
+    output: [
+      {
+        'Start Date': '2024-01-08',
+        'End Date': '',
+        Team: 'Agency',
+        Manager: '',
+        'Function Origin': 'Campaign Manager',
       },
     ],
   },
@@ -580,7 +795,7 @@ function collapseAdjacentMatchingRows(rows) {
 
     if (
       lastRow &&
-      lastRow['Salesforce ID'] === row['Salesforce ID'] &&
+      lastRow.__anchorKey === row.__anchorKey &&
       rowsMatchAcrossAttributes(lastRow, row) &&
       areDatesContinuous(lastRow['End Date'], row['Start Date'])
     ) {
@@ -701,7 +916,7 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) 
         }
 
         return current;
-      }, { role_name: row['History - role_name'] ?? '' }),
+      }, { role_name: row['History - role_name'] ?? '', __anchorKey: row.__anchorKey ?? '' }),
     ),
     searchHeaders: {
       salesforceId: liveMapping.SFDC_ID ?? '',
@@ -712,28 +927,36 @@ function buildLiveOrderedOutput(rows, liveHeaders, liveMapping, historyHeaders) 
 
 function buildHistoricalRoster(liveRows, changeRows) {
   const issues = [];
-  const liveById = new Map();
+  const liveAnchors = [];
   const changesById = new Map();
   const exportColumns = [...PREVIEW_COLUMNS];
+  const seenLiveIds = new Set();
 
   liveRows.forEach((row, index) => {
     const salesforceId = cleanValue(row.SFDC_ID);
-    if (!salesforceId) {
-      issues.push(`Live Roster row ${index + 2}: missing SFDC_ID.`);
-      return;
-    }
-
     const hireDate = parseDateInput(row.Hire_Date);
     if (!hireDate) {
-      issues.push(`Live Roster row ${index + 2}: invalid Hire_Date for ${salesforceId}.`);
+      issues.push(
+        `Live Roster row ${index + 2}: invalid Hire_Date for ${salesforceId || cleanValue(row.Full_Name) || 'this row'}.`,
+      );
       return;
     }
 
-    if (liveById.has(salesforceId)) {
+    if (!salesforceId) {
+      issues.push(
+        `Live Roster row ${index + 2}: missing SFDC_ID. Keeping this live-roster row in the export, but it cannot match history changes.`,
+      );
+    } else if (seenLiveIds.has(salesforceId)) {
       issues.push(`Live Roster row ${index + 2}: duplicate SFDC_ID ${salesforceId}.`);
     }
 
-    liveById.set(salesforceId, {
+    if (salesforceId) {
+      seenLiveIds.add(salesforceId);
+    }
+
+    liveAnchors.push({
+      anchorKey: salesforceId ? `${salesforceId}__${index}` : `live-row-${index}`,
+      historyLookupId: salesforceId,
       salesforceId,
       fullName: cleanValue(row.Full_Name),
       hireDate,
@@ -790,6 +1013,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
 
   function buildOutputRow(rep, activeState, startDate, endDate, currentRecord) {
     const row = {
+      __anchorKey: rep.anchorKey,
       'Salesforce ID': rep.salesforceId,
       'Full Name': activeState.fullName || rep.fullName || '',
       LOB: rep.passthrough['Live - LOB'] || activeState.passthrough?.['History - LOB'] || '',
@@ -809,8 +1033,10 @@ function buildHistoricalRoster(liveRows, changeRows) {
     return row;
   }
 
-  liveById.forEach((rep) => {
-    const consolidatedChanges = consolidateChangesForRep(changesById.get(rep.salesforceId) ?? []);
+  liveAnchors.forEach((rep) => {
+    const consolidatedChanges = consolidateChangesForRep(
+      rep.historyLookupId ? changesById.get(rep.historyLookupId) ?? [] : [],
+    );
     const firstKnownState = consolidatedChanges[0] ?? {};
 
     let activeState = {
@@ -887,8 +1113,8 @@ function buildHistoricalRoster(liveRows, changeRows) {
   });
 
   const sortedRows = results.sort((left, right) => {
-    if (left['Salesforce ID'] !== right['Salesforce ID']) {
-      return left['Salesforce ID'].localeCompare(right['Salesforce ID']);
+    if (left.__anchorKey !== right.__anchorKey) {
+      return String(left.__anchorKey ?? '').localeCompare(String(right.__anchorKey ?? ''));
     }
 
     return left['Start Date'].localeCompare(right['Start Date']);
@@ -901,7 +1127,7 @@ function buildHistoricalRoster(liveRows, changeRows) {
     collapseSummary: collapseResult.summary,
     issues,
     stats: {
-      reps: liveById.size,
+      reps: liveAnchors.length,
       changeRows: changeRows.length,
     },
     exportColumns: orderOutputColumns(exportColumns),
@@ -964,6 +1190,7 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
   return [
     {
       title: 'Adjacent identical era collapse',
+      exampleId: 'adjacent-identical-collapse',
       impactedCount: stats.collapseSummary.rowsRemoved,
       solved:
         'Merged back-to-back stitched rows when every attribute matched and the dates were continuous.',
@@ -974,6 +1201,7 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
     },
     {
       title: 'Missing identifiers or change dates',
+      exampleId: 'missing-keys',
       impactedCount: missingIdIssueCount,
       solved:
         'Flagged source rows that cannot be stitched safely because a key identifier or effective date is missing.',
@@ -984,6 +1212,7 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
     },
     {
       title: 'Invalid date values',
+      exampleId: 'invalid-dates',
       impactedCount: invalidDateIssueCount,
       solved:
         'Caught source dates that the parser could not trust before they created bad start or end dates.',
@@ -994,6 +1223,7 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
     },
     {
       title: 'Duplicate live roster IDs',
+      exampleId: 'duplicate-live-id',
       impactedCount: duplicateIdIssueCount,
       solved:
         'Flagged anchor-record conflicts where the live roster contains the same Salesforce ID more than once.',
@@ -1004,6 +1234,7 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
     },
     {
       title: 'Blank stitched manager or team',
+      exampleId: 'blank-manager-team',
       impactedCount: blankManagerCount + blankTeamCount,
       solved:
         'Highlighted final rows where core stitched attributes still ended blank after processing.',
@@ -1013,6 +1244,11 @@ function buildCleanupRecommendations(issues, processedRows, stats) {
         'Example: a final row has a valid Start Date and rep name, but Team or Manager is still blank.',
     },
   ];
+}
+
+function getExampleIndex(exampleId) {
+  const matchedIndex = EXAMPLE_RECORDS.findIndex((record) => record.id === exampleId);
+  return matchedIndex >= 0 ? matchedIndex : 0;
 }
 
 function InfoTooltip({ detail, example }) {
@@ -1112,14 +1348,14 @@ function groupExportColumns(columns, liveMapping, historyOnlyColumns) {
 
 function buildHistoricalRosterAudit(rows) {
   const sortedRows = [...rows].sort((left, right) => {
-    if (left['Salesforce ID'] !== right['Salesforce ID']) {
-      return String(left['Salesforce ID'] ?? '').localeCompare(String(right['Salesforce ID'] ?? ''));
+    if (left.__anchorKey !== right.__anchorKey) {
+      return String(left.__anchorKey ?? '').localeCompare(String(right.__anchorKey ?? ''));
     }
 
     return String(left['Start Date'] ?? '').localeCompare(String(right['Start Date'] ?? ''));
   });
   const uniqueEmployees = new Set(
-    sortedRows.map((row) => cleanValue(row['Salesforce ID'])).filter(Boolean),
+    sortedRows.map((row) => cleanValue(row.__anchorKey)).filter(Boolean),
   ).size;
   const currentRows = sortedRows.filter((row) => row.Current_Record === true).length;
   const terminatedSpells = sortedRows.filter(
@@ -1138,12 +1374,12 @@ function buildHistoricalRosterAudit(rows) {
   const currentRowCounts = new Map();
 
   sortedRows.forEach((row) => {
-    const salesforceId = cleanValue(row['Salesforce ID']);
-    if (!salesforceId || row.Current_Record !== true) {
+    const anchorKey = cleanValue(row.__anchorKey);
+    if (!anchorKey || row.Current_Record !== true) {
       return;
     }
 
-    currentRowCounts.set(salesforceId, (currentRowCounts.get(salesforceId) ?? 0) + 1);
+    currentRowCounts.set(anchorKey, (currentRowCounts.get(anchorKey) ?? 0) + 1);
   });
 
   currentRowCounts.forEach((count) => {
@@ -1156,7 +1392,7 @@ function buildHistoricalRosterAudit(rows) {
     const previousRow = sortedRows[index - 1];
     const currentRow = sortedRows[index];
 
-    if (previousRow['Salesforce ID'] !== currentRow['Salesforce ID']) {
+    if (previousRow.__anchorKey !== currentRow.__anchorKey) {
       continue;
     }
 
@@ -1662,8 +1898,16 @@ function MappingModal({
   );
 }
 
-function ExampleStoryModal({ open, onClose }) {
-  const [exampleIndex, setExampleIndex] = useState(0);
+function ExampleStoryModal({ open, onClose, selectedExampleId }) {
+  const [exampleIndex, setExampleIndex] = useState(getExampleIndex(selectedExampleId));
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setExampleIndex(getExampleIndex(selectedExampleId));
+  }, [open, selectedExampleId]);
 
   if (!open) {
     return null;
@@ -1736,37 +1980,14 @@ function ExampleStoryModal({ open, onClose }) {
             <strong>Short version:</strong> {example.shortVersion}
           </Notice>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <StoryCard step="1" title="What the live roster says now">
-              {example.liveSummary}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <SourceTag>Comes from roster</SourceTag>
-                <SourceTag>Current snapshot</SourceTag>
-              </div>
-            </StoryCard>
-
-            <StoryCard step="2" title="What the history file adds">
-              {example.historySummary}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <SourceTag tone="history">Comes from history roster</SourceTag>
-                <SourceTag tone="history">Shows past changes</SourceTag>
-              </div>
-            </StoryCard>
-
-            <StoryCard step="3" title="What the final export tells you">
-              {example.exportSummary}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <SourceTag tone="output">Final stitched truth</SourceTag>
-                <SourceTag tone="output">Easy to read</SourceTag>
-              </div>
-            </StoryCard>
-          </div>
-
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">Before stitching</div>
-                <SourceTag>Too simple</SourceTag>
+                <div className="text-sm font-semibold text-[color:var(--ink)]">What the live roster says now</div>
+                <SourceTag>Roster only</SourceTag>
+              </div>
+              <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[color:var(--ink)]">
+                {example.liveSummary}
               </div>
               <ExampleTable
                 columns={['Full_Name', 'Team', 'Manager', 'Function_Origin']}
@@ -1779,8 +2000,11 @@ function ExampleStoryModal({ open, onClose }) {
 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">Simple change story</div>
-                <SourceTag tone="history">What changed over time</SourceTag>
+                <div className="text-sm font-semibold text-[color:var(--ink)]">What the history file adds</div>
+                <SourceTag tone="history">Past changes</SourceTag>
+              </div>
+              <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[color:var(--ink)]">
+                {example.historySummary}
               </div>
               <div className="rounded-xl border border-[color:var(--line)] bg-white">
                 <div className="divide-y divide-[color:var(--line)]">
@@ -1800,8 +2024,11 @@ function ExampleStoryModal({ open, onClose }) {
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Final export, simplified</div>
-              <SourceTag tone="output">Final stitched truth</SourceTag>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">What the final export gives you</div>
+              <SourceTag tone="output">Clean timeline</SourceTag>
+            </div>
+            <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm leading-6 text-[color:var(--ink)]">
+              {example.exportSummary}
             </div>
             <ExampleTable
               columns={['Start Date', 'End Date', 'Team', 'Manager', 'Function Origin']}
@@ -1814,18 +2041,13 @@ function ExampleStoryModal({ open, onClose }) {
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-3">
-            {example.lessonNotes.map((note, index) => (
-              <Notice key={note}>
-                <strong>Lesson {index + 1}:</strong> {note}
-              </Notice>
-            ))}
-          </div>
+          <Notice>
+            <strong>Main takeaway:</strong> {example.lessonNotes[0]}
+          </Notice>
 
           <div className="flex items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
             <div className="text-sm text-[color:var(--muted)]">
-              Use the arrows to compare different stitching cases: manager changes, team moves,
-              terminations, and same-day cleanup.
+              Use the arrows to compare different stitching cases.
             </div>
             <div className="flex items-center gap-2">
               {EXAMPLE_RECORDS.map((record, index) => (
@@ -1873,6 +2095,7 @@ function HistoricalRosterApp() {
   const [historyOnlyExportColumns, setHistoryOnlyExportColumns] = useState([]);
   const [isMappingOpen, setIsMappingOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
+  const [selectedExampleId, setSelectedExampleId] = useState(EXAMPLE_RECORDS[0]?.id ?? '');
   const [isExportConfigOpen, setIsExportConfigOpen] = useState(false);
   const [finalViewSearch, setFinalViewSearch] = useState('');
   const [finalViewSort, setFinalViewSort] = useState({
@@ -2179,6 +2402,11 @@ function HistoricalRosterApp() {
     );
   }
 
+  function openExample(exampleId = EXAMPLE_RECORDS[0]?.id ?? '') {
+    setSelectedExampleId(exampleId);
+    setIsExampleOpen(true);
+  }
+
   return (
     <main className="min-h-screen bg-[color:var(--surface)] px-4 py-6 text-[color:var(--ink)] sm:px-6">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -2198,8 +2426,9 @@ function HistoricalRosterApp() {
               <div className="mt-3 rounded-xl border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)] px-4 py-3 text-sm text-[color:var(--ink)]">
                 <strong>How this works:</strong> the <strong>Live Roster</strong> is your main
                 list. Every valid live-roster row stays in scope, even if there is no matching
-                history. We only build timelines for people who are in the live roster. If someone
-                only appears in the history file, they will not be included.
+                history. People without a Salesforce ID still stay in the export as live-roster
+                rows; they just cannot match history changes. If someone only appears in the
+                history file, they will not be included.
               </div>
             </div>
             <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--muted)]">
@@ -2444,7 +2673,7 @@ function HistoricalRosterApp() {
                   <button
                     className="rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
                     type="button"
-                    onClick={() => setIsExampleOpen(true)}
+                    onClick={() => openExample()}
                   >
                     See Example
                   </button>
@@ -2517,6 +2746,9 @@ function HistoricalRosterApp() {
                         <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
                           Thing It Solved
                         </th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                          Example
+                        </th>
                         <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
                           Details
                         </th>
@@ -2535,6 +2767,15 @@ function HistoricalRosterApp() {
                           </td>
                           <td className="px-4 py-3 text-[color:var(--ink)]">
                             {recommendation.solved}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                              type="button"
+                              onClick={() => openExample(recommendation.exampleId)}
+                            >
+                              See Example
+                            </button>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <InfoTooltip
@@ -2606,7 +2847,7 @@ function HistoricalRosterApp() {
                     <tbody className="divide-y divide-[color:var(--line)] bg-white">
                       {sortedFinalRows.length > 0 ? (
                         sortedFinalRows.map((row, index) => (
-                          <tr key={`${row['Salesforce ID']}-${row['Start Date']}-${index}`}>
+                          <tr key={`${row.__anchorKey || row['Salesforce ID'] || 'row'}-${row['Start Date']}-${index}`}>
                             {reviewTableColumns.map((column) => (
                               <td key={column} className="whitespace-nowrap px-4 py-3 text-[color:var(--ink)]">
                                 {String(row[column] ?? '') || '—'}
@@ -2678,7 +2919,11 @@ function HistoricalRosterApp() {
           )}
         </Section>
 
-        <ExampleStoryModal open={isExampleOpen} onClose={() => setIsExampleOpen(false)} />
+        <ExampleStoryModal
+          open={isExampleOpen}
+          onClose={() => setIsExampleOpen(false)}
+          selectedExampleId={selectedExampleId}
+        />
         <ExportConfigurationModal
           open={isExportConfigOpen}
           onClose={() => setIsExportConfigOpen(false)}
