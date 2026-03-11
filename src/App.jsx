@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
+import { validateHistoricalExport } from './services/exportValidation';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const MAPPING_STORAGE_KEYS = {
@@ -1604,6 +1605,159 @@ function Notice({ tone = 'default', children }) {
   return <div className={`rounded-xl border px-4 py-3 text-sm text-[color:var(--ink)] ${toneClass}`}>{children}</div>;
 }
 
+function ValidationReportPanel({ report }) {
+  if (!report) {
+    return (
+      <Notice>
+        Export validation runs when you click <strong>Export CSV</strong>. If the current slice
+        fails integrity checks, export will stop and the report will show the blockers here.
+      </Notice>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-xl border border-[color:var(--line)] bg-white p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-[color:var(--ink)]">Export validation report</div>
+          <div className="mt-1 text-sm text-[color:var(--muted)]">
+            Current-state checks that run before the CSV is allowed to download.
+          </div>
+        </div>
+        <SourceTag tone={report.passed ? 'output' : 'history'}>
+          {report.passed ? 'Passed' : 'Blocked'}
+        </SourceTag>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <StatTile label="Live Rows" value={report.summary.liveRosterRows} />
+        <StatTile label="Assignment Rows" value={report.summary.assignmentRows} />
+        <StatTile label="Current Rows" value={report.summary.currentRows} />
+        <StatTile
+          label="Blocking Errors"
+          value={report.summary.blockingErrorCount}
+          tone={report.summary.blockingErrorCount ? 'warning' : 'success'}
+        />
+        <StatTile
+          label="Warnings"
+          value={report.summary.warningCount}
+          tone={report.summary.warningCount ? 'warning' : 'success'}
+        />
+        <StatTile label="Mismatches" value={report.summary.sampleMismatchCount} />
+      </div>
+
+      {report.blockingErrors.length ? (
+        <div className="space-y-3">
+          <div className="text-sm font-semibold text-[color:var(--ink)]">Blocking errors</div>
+          {report.blockingErrors.map((issue) => (
+            <div
+              key={issue.type}
+              className="rounded-xl border border-[color:var(--danger-line)] bg-[color:var(--danger-bg)] p-4"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">{issue.title}</div>
+                <SourceTag tone="history">{issue.count} impacted</SourceTag>
+              </div>
+              <div className="mt-2 text-sm text-[color:var(--ink)]">{issue.details}</div>
+              {issue.samples.length ? (
+                <div className="mt-3 rounded-lg border border-[color:var(--danger-line)] bg-white p-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]">
+                    Sample rows
+                  </div>
+                  <div className="mt-2 space-y-2 text-sm text-[color:var(--ink)]">
+                    {issue.samples.map((sample, index) => (
+                      <div key={`${issue.type}-${index}`}>
+                        Row {sample.rowNumber}: {sample.person} • {sample.reason}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {report.warnings.length ? (
+        <div className="space-y-3">
+          <div className="text-sm font-semibold text-[color:var(--ink)]">Warnings</div>
+          {report.warnings.map((issue) => (
+            <div
+              key={issue.type}
+              className="rounded-xl border border-[color:var(--warn-line)] bg-[color:var(--warn-bg)] p-4"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">{issue.title}</div>
+                <SourceTag tone="history">{issue.count} impacted</SourceTag>
+              </div>
+              <div className="mt-2 text-sm text-[color:var(--ink)]">{issue.details}</div>
+              {issue.samples.length ? (
+                <div className="mt-3 rounded-lg border border-[color:var(--warn-line)] bg-white p-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]">
+                    Sample rows
+                  </div>
+                  <div className="mt-2 space-y-2 text-sm text-[color:var(--ink)]">
+                    {issue.samples.map((sample, index) => (
+                      <div key={`${issue.type}-${index}`}>
+                        {sample.person} • {sample.reason}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {report.sampleMismatchedRows.length ? (
+        <div className="overflow-hidden rounded-xl border border-[color:var(--line)]">
+          <div className="border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] px-4 py-3">
+            <div className="text-sm font-semibold text-[color:var(--ink)]">Sample mismatched rows</div>
+            <div className="mt-1 text-sm text-[color:var(--muted)]">
+              Current-slice rows that do not exactly match the live roster on the checked fields.
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-[color:var(--line)] text-sm">
+              <thead className="bg-white">
+                <tr>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                    Person
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                    Stable Key
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                    Field
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                    Live Roster
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                    Stitched Current
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[color:var(--line)] bg-white">
+                {report.sampleMismatchedRows.map((row, index) => (
+                  <tr key={`${row.stableKey}-${row.field}-${index}`}>
+                    <td className="px-4 py-3 text-[color:var(--ink)]">{row.person}</td>
+                    <td className="px-4 py-3 text-[color:var(--ink)]">{row.stableKey}</td>
+                    <td className="px-4 py-3 text-[color:var(--ink)]">{row.field}</td>
+                    <td className="px-4 py-3 text-[color:var(--ink)]">{row.liveValue}</td>
+                    <td className="px-4 py-3 text-[color:var(--ink)]">{row.stitchedValue}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SourceTag({ children, tone = 'default' }) {
   const toneClass =
     tone === 'history'
@@ -2097,6 +2251,7 @@ function HistoricalRosterApp() {
   const [isExampleOpen, setIsExampleOpen] = useState(false);
   const [selectedExampleId, setSelectedExampleId] = useState(EXAMPLE_RECORDS[0]?.id ?? '');
   const [isExportConfigOpen, setIsExportConfigOpen] = useState(false);
+  const [exportValidationReport, setExportValidationReport] = useState(null);
   const [finalViewSearch, setFinalViewSearch] = useState('');
   const [finalViewSort, setFinalViewSort] = useState({
     column: 'Salesforce ID',
@@ -2193,6 +2348,7 @@ function HistoricalRosterApp() {
     setReviewColumns([]);
     setIssueSelections({});
     setSelectedExportColumns([]);
+    setExportValidationReport(null);
     setStats({
       reps: 0,
       changeRows: 0,
@@ -2274,6 +2430,7 @@ function HistoricalRosterApp() {
     setIssues([]);
     setIssueSelections({});
     setSelectedExportColumns([]);
+    setExportValidationReport(null);
     setStats({
       reps: 0,
       changeRows: 0,
@@ -2312,6 +2469,7 @@ function HistoricalRosterApp() {
     setIssueSelections({});
     setSelectedExportColumns([]);
     setReviewColumns([]);
+    setExportValidationReport(null);
     setIsProcessing(true);
 
     try {
@@ -2355,6 +2513,7 @@ function HistoricalRosterApp() {
       setReviewColumns([]);
       setIssueSelections({});
       setSelectedExportColumns([]);
+      setExportValidationReport(null);
       setStats({
         reps: 0,
         changeRows: 0,
@@ -2405,6 +2564,25 @@ function HistoricalRosterApp() {
   function openExample(exampleId = EXAMPLE_RECORDS[0]?.id ?? '') {
     setSelectedExampleId(exampleId);
     setIsExampleOpen(true);
+  }
+
+  function handleExport() {
+    const validationReport = validateHistoricalExport({
+      stitchedRows: reviewRows,
+      liveRows: liveUpload.rows,
+      liveHeaders: liveUpload.headers,
+      liveMapping: mappings.live,
+    });
+
+    setExportValidationReport(validationReport);
+
+    if (!validationReport.passed) {
+      setError('Export stopped. Fix the blocking validation issues in Review Final Roster.');
+      return;
+    }
+
+    setError('');
+    downloadCsv(reviewRows, selectedExportColumns);
   }
 
   return (
@@ -2688,7 +2866,7 @@ function HistoricalRosterApp() {
                     className="rounded-md bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--muted)]"
                     type="button"
                     disabled={!reviewRows.length || selectedExportColumns.length === 0}
-                    onClick={() => downloadCsv(reviewRows, selectedExportColumns)}
+                    onClick={handleExport}
                   >
                     Export CSV
                   </button>
@@ -2789,6 +2967,8 @@ function HistoricalRosterApp() {
                   </table>
                 </div>
               </div>
+
+              <ValidationReportPanel report={exportValidationReport} />
 
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="w-full max-w-xl">
